@@ -24,7 +24,7 @@ dist/
 *.temp 
 
 # File di test
-manualTest
+manualTest/testFiles
 
 # File di vs code
 .vscode
