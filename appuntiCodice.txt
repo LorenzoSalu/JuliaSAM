@@ -1,0 +1,153 @@
+Appunti scrittura codice Julia
+
+- Codice image_encoder migliorabile, si può pulire molto stando attenti 
+a row-major e col-major
+
+————————————————————————————————
+
+
+*** Considerazioni sulla traduzione (.py -> .jl) ***
+
+- torch.Tensor -> AbstractArray
+- x: int = 0 -> x::Int = 3
+- x.shape -> size(x)
+
+- L'ordine di gestione della memoria é differente tra julia e python, i tensori infatti vengono gestiti diversamente:
+    + Julia usa una gestione column-major
+    + Python usa una gestione row-major
+Per questo motivo bisogna effettuare delle trasformazioni per la riuscita della traduzione corretta del codice 
+
+
+————————————————————————————————
+
+*** Attention ***
+
+È facile verificare tramite i test che settando manualmente pesi e bias 
+uguali a quelli calcolati dal codice python, le funzioni ritornano gli stessi
+risultati.
+
+Che cosa succede quando i pesi e i bias vengono calcolati da julia?
+Come cambiano i risultati?, continuano a mantenere un significato corretto?
+
+
+————————————————————————————————
+
+*** add_decompose_rel_pos ***
+
+Questa funzione implementa il meccanismo di “Decompose Relative Positional Embeddings”.
+
+Si basa sul concetto di attenzione il quale permette alla rete neurale di focalizzarsi su parti rilevanti dell’input; è una pesatura che indica quanto ogni patch è rilevante per la ricerca di un certo oggetto
+
+Concetti base ->
+- Query, rappresenta cosa si sta cercando in ogni posizione; ogni patch query cerca informazioni rilevanti nelle altre patch
+- Posizioni relative, codificano la distanza spaziale tra le patch e si dividono in orizzontali e verticali (sono la distanza verticale e orizzontale tra le patch)
+- Key, contenuto di una certa patch
+
+In questo caso Query e Position rappresentano le posizioni spaziali da confrontare per arricchire gli embeddings basandosi sulla vicinanza di questi elementi.
+
+es: distanza massima relativa = 11 significa che le distanza tra query e key può assumere al max 11 valori distinti
+
+k	q (q - k)
+0	0	 0
+0	1   -1
+0	2	-2
+0	3	-3
+0	4	-4
+0	5	-5
+1	0	 1
+1	1	 0
+...
+
+
+Obiettivo -> 
+- Aggiungere informazioni sulla posizione delle patch 
+- Aiutare il modello a capire la disposizione spaziale tra le patch dell’immagine
+
+Input ->
+- attn, mappa di attenzione (B, q_h * q_w, k_h * k_w)
+- q, query dell’attenzione (B,, q_h * q_w, C)
+- rel_pos_h, embeddings di posizione relativa per l’asse altezza (Lh, C)
+- rel_pos_w, embeddings di posizione relativa per l’asse larghezza (Lw, C)
+- q_size, dimensioni spaziali della query (q_h, q_w)
+- k_size, dimensioni spaziali della key (k_h, k_w)
+
+Funzionamento -> 
+- Calcolo delle posizioni relative: vengono calcolate le posizioni relative tra query e key per entrambi gli assi
+- Riorganizzazione della query: da (B, q_h * q_w, C) a (B, q_h, q_w, C) per lavorare con dimensioni spaziali separate 
+- Calcolo embeddings di posizione: calcola quanto ogni posizione è influenzata dalle altre posizioni 
+
+Output ->
+- Vengono aggiunti gli embeddings di posizione alla mappa di attenzione originale 
+- Vengono combinati gli effetti di altezza e larghezza
+- Il risultato appare riorganizzato nel formato originale 
+
+Vantaggi -> 
+- Il problema 2D viene decomposto in due problemi 1D abbassando la complessità computazionale da O((HW)²) a O(H² + W²)
+- Vengono catturate le relazioni spaziali tra le patch in modo da poter capire la disposizione 2D dell’immagine
+
+
+
+————————————————————————————————
+
+*** get_rel_pos ***
+
+Questa funzione ha l’obiettivo di calcolare le posizioni relative tra ogni elemento della query ed ogni elemento della key generando una mappa di embeddings che codifica le relazioni spaziali.
+
+Vengono gestiti i casi in cui q e k hanno dimensioni diverse applicando una scalatura dei valori
+
+Interpolazione lineare su matrice, serve per cercare punti sconosciuti affidandosi ai punti noti
+
+Concetti ->
+- Coordinate Relative: indicano la posizione di un punto rispetto a un altro e mantengono la direzione (positivo/negativo)
+- Distanza Relativa: è la lunghezza del vettore tra due punti, è sempre un numero positivo, non tiene conto della direzione
+
+Input -> 
+- q_size, dimensione della query
+- k_size, dimensione della key
+- rel pos, embedding di posizione base
+
+Funzionamento ->
+- Calcolo distanza massima relativa: viene calcolata la distanza massima che può esistere tra query e key
+- Interpolazione embeddings: se gli embeddings di posizione non coprono tutte le distanze possibili, vengono interpolati linearmente gli embeddings per tutte
+- Calcolo coordinate relative: viene creata una griglia di coordinate relative scalando le coordinate se q e k hanno dimensioni diverse 
+
+Efficienza -> 
+- Vengono precalcolate tutte le distanze relative
+- Vengono riutilizzati stessi embeddings per distanze simili
+- Funziona con dimensioni diverse tra q e k
+- Mantiene la coerenza spaziale
+
+Note -> 
+- È stata creata la funzione per l'interpolazione separatamente
+- É stata creata la funzione get_positions per ricreare fedelmente il comportamento dell'interpolazione di pyTorch
+– Sono stati eseguiti i test per la valutazione della correttezza: i risultati sono fedeli con una tolleranza relativa di 1e-6
+
+————————————————————————————————
+
+*** PatchEmbed ***
+
+È la componente che serve a dividere l’immagine in patch non sovrapposte e proiettarle in uno spazio di embedding da utilizzare come input per i layer successivi (convoluzione)
+
+Con embedding si definisce la trasformazione di una patch (porzione di immagine) in un vettore numerico di dimensione fissa
+
+Forward Pass (PatchEmbed)
+Input -> (H, W, C, B) dove:
+- H, altezza immagine
+- W, larghezza immagine
+- C, numero di canali (es: 3 per RGB)
+- B, dimensione batch
+
+Trasformazioni -> 
+- Divisione in patch. L’immagine viene divisa in patch di dimensione kernel_size (es: 16x16) : gestito automaticamente dalla convoluzione. Vengono quindi trovati il numero di patch in altezza e larghezza e di conseguenza il numero totale.
+- Proiezione lineare. Ogni patch viene proiettata in uno spazio di embedding di dimensione embed_dim, azione implementata da Conv. (Es: se embed_dim = 768, allora ogni patch viene mappata in un vettore di 768 dimensioni)
+- Riorganizzazione dimensioni. Dopo la convoluzione l’output ha forma (H’, W’, C’, B) che viene trasformata in (B, H’, W’, C’)
+
+Output (es: 2, 14, 14, 768) ->
+- Ogni elemento (i, j) nella griglia 14x14 è l’embedding di una patch
+- 768 indica il numero di features estratte da ciascuna patch
+- batch_size = 2 indica che si stanno processando due immagini nello stesso momento
+
+Utilità -> 
+- Viene ridotta la dimensionalità spaziale (es: da 224x224 a 14x14)
+- Viene aumentata la dimensionalità delle features (es: da 3 a 768)
+- Viene preparato l’input per gli strati successivi

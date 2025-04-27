@@ -1,0 +1,5 @@
+{
+    "editor.wordWrapColumn": 80,
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.rulers": [80]
+}
