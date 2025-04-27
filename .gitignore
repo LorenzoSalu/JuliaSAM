@@ -22,3 +22,9 @@ dist/
 # File temporanei
 *.tmp
 *.temp 
+
+# File di test
+manualTest/testFiles
+
+# File di vs code
+.vscode
