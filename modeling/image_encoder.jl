@@ -1,9 +1,10 @@
-using Flux
 using Lux
 using CUDA
 using Interpolations
 using TensorOperations
 using Einsum
+using Random
+using NNlib
 
 
 ########################################################
@@ -17,11 +18,16 @@ struct Attention
     num_heads::Int
     scale::Float64
     qkv::Dense
+    qkv_ps::NamedTuple
+    qkv_st::NamedTuple
     proj::Dense
+    proj_ps::NamedTuple
+    proj_st::NamedTuple
     use_rel_pos::Bool
     rel_pos_h::Union{Nothing, Matrix{Float32}}
     rel_pos_w::Union{Nothing, Matrix{Float32}}
 end
+
 
 function Attention(;
     dim::Int,
@@ -35,9 +41,13 @@ function Attention(;
     head_dim = dim ÷ num_heads
     scale = 1 / sqrt(head_dim)
 
+    rng = Random.MersenneTwister() # Da modificare?
+
     qkv = Dense(dim, dim * 3, use_bias=qkv_bias, init_weight = kaiming_uniform)
+    qkv_ps, qkv_st = Lux.setup(rng, qkv)
 
     proj = Dense(dim, dim, init_weight = kaiming_uniform)
+    proj_ps, proj_st = Lux.setup(rng, proj)
 
     rel_pos_h, rel_pos_w = nothing, nothing
 
@@ -55,23 +65,131 @@ function Attention(;
         dim,
         num_heads, 
         scale, 
-        qkv, 
+        qkv,
+        qkv_ps,
+        qkv_st,
         proj, 
+        proj_ps,
+        proj_st,
         use_rel_pos, 
         rel_pos_h, 
         rel_pos_w
         )
 end
 
-#=
-function (m::Attention)(x::AbstractArray)
+
+function (self::Attention)(x::AbstractArray)
+
     B, H, W, _ = size(x)
 
-    #qkv 
+    # Per effettuare test decommentare
+    ####################################################################
+    #self.qkv_ps.weight .= expected_qkv_weights 
+    #self.qkv_ps.bias .= expected_qkv_bias 
+
+    #self.proj_ps.weight .= expected_proj_weights 
+    #self.proj_ps.bias .= expected_proj_bias 
+    ####################################################################
+
+    qkv_out, _ = self.qkv(
+        permutedims(x, (4, 1, 2, 3)), 
+        self.qkv_ps, 
+        self.qkv_st
+    )
+
+    qkv_out = permutedims(qkv_out, (2, 3, 4, 1))
+
+    qkv_out_reshaped = permutedims(
+        reshape(
+            permutedims(qkv_out, (4, 3, 2, 1)),
+            (:, self.num_heads, 3, H * W, B)
+        ), (5, 4, 3, 2, 1))
+
+    qkv = permutedims(
+        qkv_out_reshaped,
+        (3, 1, 4, 2, 5)
+    )
+
+    qkv = permutedims(
+        reshape(
+            permutedims(
+                qkv,
+                (5, 4, 3, 2, 1)
+            ),
+            (:, H * W, B * self.num_heads, 3)
+        ),
+        (4, 3, 2, 1)
+    )
+
+    q, k, v = collect(eachslice(qkv; dims=1))
+
+    scaled_q = q * self.scale
+
+    transposed_k = permutedims(k, (1, 3, 2))
+
+    scaled_q = permutedims(scaled_q, (2, 3, 1))
+    transposed_k = permutedims(transposed_k, (2, 3, 1))
+
+    attn = batched_mul(scaled_q, transposed_k)
+    attn = permutedims(attn, (3, 1, 2))
+
+    if self.use_rel_pos
+        attn = add_decompose_rel_pos(
+            attn,
+            q, 
+            self.rel_pos_h, 
+            self.rel_pos_w, 
+            (H, W),
+            (H, W)
+            )
+    end
+
+    attn = softmax(attn, dims=3)
+
+    attn_v = batched_mul(
+        permutedims(attn, (2, 3, 1)),
+        permutedims(v, (2, 3, 1))
+        )
+
+    attn_v = permutedims(attn_v, (3, 1, 2))
+
+    attn_v = permutedims(
+        reshape(
+            permutedims(
+                attn_v,
+                (3, 2, 1)
+            ),
+            (:, W, H, self.num_heads, B)
+        ),
+        (5, 4, 3, 2, 1)
+    )
+
+    attn_v = permutedims(attn_v, (1, 3, 4, 2, 5))
+
+    x = permutedims(
+        reshape(
+            permutedims(
+                attn_v,
+                (5, 4, 3, 2, 1)
+            ),
+            (:, W, H, B)
+        ),
+        (4, 3, 2, 1)
+    )
+
+    x = Float32.(x)
+
+    x, _ = self.proj(
+        permutedims(x, (4, 1, 2, 3)), 
+        self.proj_ps, 
+        self.proj_st
+        )
+
+    x = permutedims(x, (2, 3, 4, 1))
 
     return x
 end
-=#
+
 
 ########################################################
 # window_partition: 
