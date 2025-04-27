@@ -11,39 +11,44 @@ using Einsum
 # divide la finestra a in partizioni più piccole 
 ########################################################
 
-#=
-struct Attention1
+
+struct Attention
     dim::Int
     num_heads::Int
-    scale::Float32
+    scale::Float64
     qkv::Dense
     proj::Dense
     use_rel_pos::Bool
-    rel_pos_h::Union{Nothing, Param{Matrix{Float32}}}
-    rel_pos_w::Union{Nothing, Param{Matrix{Float32}}}
+    rel_pos_h::Union{Nothing, Matrix{Float32}}
+    rel_pos_w::Union{Nothing, Matrix{Float32}}
 end
 
-function Attention(
-    dim::Int;
+function Attention(;
+    dim::Int,
     num_heads::Int = 8,
     qkv_bias::Bool = true,
     use_rel_pos::Bool = false,
     rel_pos_zero_init::Bool = true,
-    input_size::{Nothing, Tuple{Int, Int}} = nothing
+    input_size::Union{Nothing, Tuple{Int, Int}} = nothing
     )
     
     head_dim = dim ÷ num_heads
     scale = 1 / sqrt(head_dim)
 
-    qkv = Dense(dim, dim * 3, qkv_bias)
-    proj = Dense(dim, dim)
+    qkv = Dense(dim, dim * 3, use_bias=qkv_bias, init_weight = kaiming_uniform)
+
+    proj = Dense(dim, dim, init_weight = kaiming_uniform)
+
+    rel_pos_h, rel_pos_w = nothing, nothing
 
     if use_rel_pos
         @assert input_size !== nothing 
         "Input size must be provided if using relative positional encoding."
 
-        rel_pos_h = param(zeros(2 * input_size[1] - 1, head_dim))
-        rel_pos_w = param(zeros(2 * input_size[2] - 1, head_dim))
+        rel_pos_h = 
+            zeros(Float32, 2 * input_size[1] - 1, head_dim)
+        rel_pos_w = 
+            zeros(Float32, 2 * input_size[2] - 1, head_dim)
     end
     
     return Attention(
@@ -58,13 +63,13 @@ function Attention(
         )
 end
 
-
+#=
 function (m::Attention)(x::AbstractArray)
-     B, H, W, _ = size(x)
+    B, H, W, _ = size(x)
 
-     qkv = 
+    #qkv 
 
-     return x
+    return x
 end
 =#
 
