@@ -12,7 +12,7 @@ using NNlib
 # divide la finestra a in partizioni più piccole 
 ########################################################
 
-
+# Definizione struttura attention
 struct Attention
     dim::Int
     num_heads::Int

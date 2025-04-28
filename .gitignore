@@ -25,6 +25,8 @@ dist/
 
 # File di test
 manualTest/
+imageEncoderTest/
+commonTest/
 
 # File appunti
 appuntiCodice.txt
