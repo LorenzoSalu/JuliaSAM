@@ -6,6 +6,8 @@ using Einsum
 using Random
 using NNlib
 
+include("../global_functions.jl")
+
 
 ########################################################
 # Attention: 
@@ -98,37 +100,20 @@ function (self::Attention)(x::AbstractArray)
     )
 
     qkv_out = permutedims(qkv_out, (2, 3, 4, 1))
-
-    qkv_out_reshaped = permutedims(
-        reshape(
-            permutedims(qkv_out, (4, 3, 2, 1)),
-            (:, self.num_heads, 3, H * W, B)
-        ), (5, 4, 3, 2, 1))
+    qkv_out_reshaped = sam_reshape(qkv_out, (B, H*W, 3, self.num_heads, :))
 
     qkv = permutedims(
         qkv_out_reshaped,
         (3, 1, 4, 2, 5)
     )
 
-    qkv = permutedims(
-        reshape(
-            permutedims(
-                qkv,
-                (5, 4, 3, 2, 1)
-            ),
-            (:, H * W, B * self.num_heads, 3)
-        ),
-        (4, 3, 2, 1)
-    )
+    qkv = sam_reshape(qkv, (3, B * self.num_heads, H * W, :))
 
     q, k, v = collect(eachslice(qkv; dims=1))
 
     scaled_q = q * self.scale
-
-    transposed_k = permutedims(k, (1, 3, 2))
-
     scaled_q = permutedims(scaled_q, (2, 3, 1))
-    transposed_k = permutedims(transposed_k, (2, 3, 1))
+    transposed_k = permutedims(k, (3, 2, 1))
 
     attn = batched_mul(scaled_q, transposed_k)
     attn = permutedims(attn, (3, 1, 2))
@@ -150,41 +135,17 @@ function (self::Attention)(x::AbstractArray)
         permutedims(attn, (2, 3, 1)),
         permutedims(v, (2, 3, 1))
         )
-
     attn_v = permutedims(attn_v, (3, 1, 2))
-
-    attn_v = permutedims(
-        reshape(
-            permutedims(
-                attn_v,
-                (3, 2, 1)
-            ),
-            (:, W, H, self.num_heads, B)
-        ),
-        (5, 4, 3, 2, 1)
-    )
-
+    attn_v = sam_reshape(attn_v, (B, self.num_heads, H, W, :))
     attn_v = permutedims(attn_v, (1, 3, 4, 2, 5))
 
-    x = permutedims(
-        reshape(
-            permutedims(
-                attn_v,
-                (5, 4, 3, 2, 1)
-            ),
-            (:, W, H, B)
-        ),
-        (4, 3, 2, 1)
-    )
-
+    x = sam_reshape(attn_v, (B, H, W, :))
     x = Float32.(x)
-
     x, _ = self.proj(
         permutedims(x, (4, 1, 2, 3)), 
         self.proj_ps, 
         self.proj_st
         )
-
     x = permutedims(x, (2, 3, 4, 1))
 
     return x
@@ -217,22 +178,16 @@ function window_partition(
     # Ricalcolo delle dimensioni
     Hp, Wp = H + pad_h, W + pad_w 
 
-   # Calcolo delle finestre 
-    x = permutedims(reshape(
-        permutedims(x, (4, 3, 2, 1)),
-        B, 
-        Hp ÷ window_size,
-        window_size,
-        Wp ÷ window_size,
-        window_size,
-        C
-        ), (1, 2, 3, 4, 5, 6))
-
-    windows = permutedims(reshape(
-        permutedims(x, (4, 6, 3, 5, 1, 2)),
-        :, window_size, window_size, C), (1, 3, 2, 4)
+   # Calcolo delle finestre
+    x = sam_reshape(
+        x, 
+        (B, Hp ÷ window_size, window_size, Wp ÷ window_size, window_size, C)
         )
-
+    
+    windows = sam_reshape(
+        permutedims(x, (1, 2, 4, 3, 5, 6)),
+        (:, window_size, window_size, C)
+        )
     # Ritorno dei valori ottenuti
     return windows, (Hp, Wp)
 end
@@ -261,28 +216,17 @@ function window_unpartition(
 
     # Primo reshape
     # organizza le finestre in una griglia per ogni immagine nel batch.
-    first_x = permutedims(reshape(
+    first_x = sam_reshape(
         windows,
-        B, 
-        Hp ÷ window_size, 
-        Wp ÷ window_size, 
-        window_size,
-        window_size,
-        :
-        ), (3, 2, 1, 4, 5, 6))
+        (B, Hp ÷ window_size, Wp ÷ window_size, window_size, window_size, :)
+    )
 
     first_x_perm = permutedims(first_x, (1, 2, 4, 3, 5, 6))
     # In python viene usato .contiguous() su first_x_perm
         
     #Ricostruisce l'immagine con padding, 
     # combinando le finestre in un'unica sequenza
-    second_x = reshape(
-    permutedims(first_x_perm, (1, 3, 2, 5, 4, 6)),
-    B,
-    Hp,
-    Wp,
-    :
-    )
+    second_x = sam_reshape(first_x_perm, (B, Hp, Wp, :))
 
     # Rimozione del padding se necessario
     if Hp > H || Wp > W
@@ -323,8 +267,7 @@ function add_decompose_rel_pos(
     # Recupero le dimensioni di q
     B, _, dim = size(q)
 
-
-    r_q = permutedims(reshape(q, B, q_h, q_w, dim), (1, 3, 2, 4))
+    r_q = sam_reshape(q, (B, q_h, q_w, dim))
 
     # Viene ricreata la funzione einsum di Pythorch
     # Einsum sta per Einstein Summation per moltiplicazioni e somme di tensori
@@ -333,11 +276,8 @@ function add_decompose_rel_pos(
     @einsum rel_w[b,h,w,k] := r_q[b,h,w,c] * Rw[w,k,c]
 
     # Reshape di attn
-    attn_reshaped = permutedims(
-        reshape(attn, B, q_h, q_w, k_h, k_w),
-        (1, 3, 2, 5, 4)
-        )
-
+    attn_reshaped = sam_reshape(attn, (B, q_h, q_w, k_h, k_w))
+    
     # Vengono aggiunti gli embeddings posizionali alle attenzioni
     # Aggiunta di rel_h e rel_w con broadcasting
     attn_with_rel = 
@@ -346,12 +286,7 @@ function add_decompose_rel_pos(
         reshape(rel_w, B, q_w, q_h, 1, k_w)
 
     # Reshape finale
-    attn_final = reshape(
-        permutedims(attn_with_rel, (1, 3, 2, 5, 4)),
-        B,
-        q_h*q_w,
-        k_h*k_w
-        )
+    attn_final = sam_reshape(attn_with_rel, (B, q_h * q_w, k_h * k_w))
 
     # Restituisce la mappa di attenzione sommati agli embeddings posizionali
     return attn_final
