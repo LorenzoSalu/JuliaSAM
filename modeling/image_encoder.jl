@@ -8,6 +8,131 @@ using NNlib
 
 include("../global_functions.jl")
 
+########################################################
+# Block:
+########################################################
+
+struct Block{N1, N2, A, M}
+    norm1::N1
+    norm1_ps::NamedTuple
+    norm1_st::NamedTuple
+    norm2::N2
+    norm2_ps::NamedTuple
+    norm2_st::NamedTuple
+    attn::A
+    mlp::M
+    window_size::Int
+end
+
+function Block(;
+    dim::Int,
+    num_heads::Int,
+    mlp_ratio::Float32 = 4.0f0,
+    qkv_bias::Bool = true,
+    norm_layer::Type = LayerNorm,
+    act_layer::Function = gelu_exact,
+    use_rel_pos::Bool = false,
+    rel_pos_zero_init::Bool = true,
+    window_size::Int = 0,
+    input_size::Union{Nothing, Tuple{Int, Int}}
+    )
+    
+    rng = Random.MersenneTwister()
+
+    norm1 = norm_layer(dim, dims=1)
+    norm1_ps, norm1_st = Lux.setup(rng, norm1)
+
+    norm2 = norm_layer(dim, dims=1)
+    norm2_ps, norm2_st = Lux.setup(rng, norm2)
+
+    # Per effettuare test decommentare
+    ####################################################################
+    #norm1_ps.scale .= test_norm1_weight
+    #norm1_ps.bias .= test_norm1_bias
+
+    #norm2_ps.scale .= test_norm2_weight 
+    #norm2_ps.bias .= test_norm2_bias
+    ####################################################################
+
+    attn = Attention(
+        dim,
+        num_heads = num_heads,
+        qkv_bias = qkv_bias,
+        use_rel_pos = use_rel_pos,
+        rel_pos_zero_init = rel_pos_zero_init,
+        input_size = window_size == 0 ? input_size : (window_size, window_size)
+    )
+
+    mlp = MLPBlock(
+        embedding_dim = dim, 
+        mlp_dim = Int.(dim * mlp_ratio), 
+        act = act_layer
+        )
+
+    window_size = window_size
+    
+    return Block(
+        norm1,
+        norm1_ps,
+        norm1_st,
+        norm2,
+        norm2_ps,
+        norm2_st,
+        attn,
+        mlp,
+        window_size
+        )
+end
+
+function (self::Block)(x::AbstractArray)
+
+    shortcut = x
+
+    A, B, C, D = size(x)
+    
+    x = sam_reshape(x, (:, D))'
+
+    x, _ = self.norm1(
+        x,
+        self.norm1_ps, 
+        self.norm1_st
+        )
+
+    x = sam_reshape(x', (A, B, C, D))
+    
+    if self.window_size > 0
+        H, W = size(x, 2), size(x, 3)
+
+        x, pad_hw = window_partition(x, self.window_size)
+    end
+
+    x = self.attn(x)
+
+    if self.window_size > 0
+        x = window_unpartition(x, self.window_size, pad_hw, (H, W))
+    end
+
+    x = shortcut .+ x
+
+    A, B, C, D = size(x)
+
+    norm2_x = sam_reshape(x, (:, D))'
+
+    norm2_x, _ = self.norm2(
+        norm2_x,
+        self.norm2_ps, 
+        self.norm2_st
+        )
+
+    norm2_x = sam_reshape(norm2_x', (A, B, C, D))
+
+    mlp_x = self.mlp(norm2_x)
+
+    x = x .+ mlp_x
+
+    return x
+end
+
 
 ########################################################
 # Attention: 
@@ -31,8 +156,8 @@ struct Attention
 end
 
 
-function Attention(;
-    dim::Int,
+function Attention(
+    dim::Int;
     num_heads::Int = 8,
     qkv_bias::Bool = true,
     use_rel_pos::Bool = false,
@@ -86,11 +211,11 @@ function (self::Attention)(x::AbstractArray)
 
     # Per effettuare test decommentare
     ####################################################################
-    #self.qkv_ps.weight .= expected_qkv_weights 
-    #self.qkv_ps.bias .= expected_qkv_bias 
+    self.qkv_ps.weight .= test_qkv_weights 
+    self.qkv_ps.bias .= test_qkv_bias 
 
-    #self.proj_ps.weight .= expected_proj_weights 
-    #self.proj_ps.bias .= expected_proj_bias 
+    self.proj_ps.weight .= test_proj_weights 
+    self.proj_ps.bias .= test_proj_bias 
     ####################################################################
 
     qkv_out, _ = self.qkv(

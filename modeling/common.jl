@@ -21,9 +21,9 @@ struct MLPBlock
     act::Function
 end
 
-function MLPBlock(
+function MLPBlock(;
     embedding_dim::Int,
-    mlp_dim::Int;
+    mlp_dim::Int,
     act::Function = gelu_exact
     )
 
@@ -37,11 +37,12 @@ function MLPBlock(
 
     # Per effettuare test decommentare
     ####################################################################
-    #lin1_ps.weight .= test_lin1_weight
-    #lin1_ps.bias .= test_lin1_bias
+    lin1_ps.weight .= test_lin1_weight
+    lin1_ps.bias .= test_lin1_bias
 
-    #lin2_ps.weight .= test_lin2_weight 
-    #lin2_ps.bias .= test_lin2_bias
+
+    lin2_ps.weight .= test_lin2_weight 
+    lin2_ps.bias .= test_lin2_bias
     ####################################################################
 
     return MLPBlock(
@@ -54,13 +55,17 @@ function MLPBlock(
 end
 
 function (self::MLPBlock)(x::AbstractArray)::AbstractArray
-    x, _ = self.lin1(x', self.lin1_ps, self.lin1_st)
-    x = x'
+
+    x = permutedims(x, (4, 1, 2, 3))
+    x, _ = self.lin1(x, self.lin1_ps, self.lin1_st)
+    x = permutedims(x, (2, 3, 4, 1))
 
     x = self.act.(x)
 
-    y, = self.lin2(x', self.lin2_ps, self.lin2_st)
-    y = y'
+    x = permutedims(x, (4, 1, 2, 3))
+    y, = self.lin2(x, self.lin2_ps, self.lin2_st)
+
+    y = permutedims(y, (2, 3, 4, 1))
 
     return y
 end
