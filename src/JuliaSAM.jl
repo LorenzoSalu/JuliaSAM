@@ -6,6 +6,6 @@ using CUDA
 
 export PatchEmbed
 
-include("../modeling/image_encoder.jl")
+include("./image_encoder.jl")
 
 end # module 
