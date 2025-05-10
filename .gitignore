@@ -26,6 +26,7 @@ dist/
 # File di test
 manualTest/
 imageEncoderTest/
+maskDecoderTest/
 commonTest/
 
 # File appunti
