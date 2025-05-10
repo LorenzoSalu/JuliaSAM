@@ -1,4 +1,6 @@
 using Lux
+using Lux: Dense
+using Lux: Conv
 using CUDA
 using Interpolations
 using TensorOperations
@@ -7,6 +9,8 @@ using Random
 using NNlib
 
 include("../global_functions.jl")
+
+
 
 ########################################################
 # Block:
@@ -136,7 +140,6 @@ end
 
 ########################################################
 # Attention: 
-# divide la finestra a in partizioni più piccole 
 ########################################################
 
 # Definizione struttura attention
@@ -211,11 +214,11 @@ function (self::Attention)(x::AbstractArray)
 
     # Per effettuare test decommentare
     ####################################################################
-    self.qkv_ps.weight .= test_qkv_weights 
-    self.qkv_ps.bias .= test_qkv_bias 
+    #self.qkv_ps.weight .= test_qkv_weights 
+    #self.qkv_ps.bias .= test_qkv_bias 
 
-    self.proj_ps.weight .= test_proj_weights 
-    self.proj_ps.bias .= test_proj_bias 
+    #self.proj_ps.weight .= test_proj_weights 
+    #self.proj_ps.bias .= test_proj_bias 
     ####################################################################
 
     qkv_out, _ = self.qkv(
@@ -486,12 +489,13 @@ end
 
 
 
-########################################################
+"""
 # get_positions: 
 # Calcola le posizioni di interpolazione
-########################################################
+
 
 # Viene definita la funzione get_positions
+"""
 function get_positions(in_len, out_len)
     scale = in_len / out_len # Rapporto tra lunghezze di input e output
 
@@ -545,6 +549,8 @@ end
 # Rappresenta un layer di embedding per le patch dell'immagine
 struct PatchEmbed
     proj::Conv # proj è un campo di tipo Conv
+    proj_ps::NamedTuple
+    proj_st::NamedTuple
 end
 
 # Costruttore per PatchEmbed con parametri di default
@@ -563,19 +569,145 @@ function PatchEmbed(;
         (kernel_size...,), # (Kernel_size..,) è una tupla di interi separati
         in_chans => embed_dim; 
         stride=stride, 
-        pad=padding
+        pad=padding,
+        cross_correlation=true,
+        init_weight=kaiming_uniform
         )
     
+    rng = Random.MersenneTwister()
+    proj_ps, proj_st = Lux.setup(rng, proj)
+    
     # Restituisce un'istanza di PatchEmbed con il layer di convoluzione creato
-    return PatchEmbed(proj)
+    return PatchEmbed(proj, proj_ps, proj_st)
 end
 
 # Viene definito il forward pass per PatchEmbed
-# Input: (H, W, C, B)
-# Output: (B, H', W', C)
-function (m::PatchEmbed)(x::AbstractArray)
-    # output da proj (H', W', C', B)
-    y = m.proj(x) 
-    # (H', W', C', B) -> (B, H', W', C')
+function (self::PatchEmbed)(x::AbstractArray)
+    x = permutedims(x, (3, 4, 2, 1))
+    y, _ = self.proj(x, self.proj_ps, self.proj_st) 
     return permutedims(y, (4, 1, 2, 3))  
+end
+
+
+
+########################################################
+# imageEncoderViT:
+########################################################
+
+struct ImageEncoderViT
+    img_size::Int
+    patch_embed::PatchEmbed
+    pos_embed::Union{Nothing, Array{Float32}}
+    blocks::Vector{Block}
+    neck::Chain
+    neck_ps::NamedTuple
+    neck_st::NamedTuple
+end
+
+
+function ImageEncoderViT(;
+    img_size::Int = 1024,
+    patch_size::Int = 16,
+    in_chans::Int = 3,
+    embed_dim::Int = 768,
+    depth::Int = 12,
+    num_heads::Int = 12,
+    mlp_ratio::Float32 = 4.0f0,
+    out_chans::Int = 256,
+    qkv_bias::Bool = true,
+    norm_layer::Type = LayerNorm,
+    act_layer::Function = gelu_exact,
+    use_abs_pos::Bool = true,
+    use_rel_pos::Bool = false,
+    rel_pos_zero_init::Bool = true,
+    window_size::Int = 0,
+    global_attn_indexes::NTuple{N, Int} where N = (),
+    )
+
+    img_size = img_size
+
+    patch_embed = PatchEmbed(
+        kernel_size = (patch_size, patch_size),
+        stride = (patch_size, patch_size),
+        in_chans = in_chans,
+        embed_dim = embed_dim,
+    )
+
+    pos_embed = nothing
+
+    if use_abs_pos
+        pos_embed = zeros(
+            Float32, 
+            1, 
+            img_size ÷ patch_size, 
+            img_size ÷ patch_size, 
+            embed_dim
+            )
+    end
+
+    blocks = Vector{Block}(undef, depth)
+    
+    for i in 1:depth
+        blocks[i] = Block(
+            dim = embed_dim,
+            num_heads = num_heads,
+            mlp_ratio = mlp_ratio,
+            qkv_bias = qkv_bias,
+            norm_layer = norm_layer,
+            act_layer = act_layer,
+            use_rel_pos = use_rel_pos,
+            rel_pos_zero_init = rel_pos_zero_init,
+            window_size = i ∉ global_attn_indexes ? window_size : 0,
+            input_size = (img_size ÷ patch_size, img_size ÷ patch_size)
+        )
+    end
+
+    neck = Chain(
+        Conv((1, 1), embed_dim => out_chans, use_bias=false, cross_correlation=true),
+        LayerNorm2d(out_chans),
+
+        Conv((3, 3), out_chans => out_chans, pad=1, use_bias=false,
+            cross_correlation=true),
+        LayerNorm2d(out_chans)
+    )
+
+    rng = Random.MersenneTwister()
+    neck_ps, neck_st = Lux.setup(rng, neck)
+
+    return ImageEncoderViT(
+        img_size,
+        patch_embed,
+        pos_embed,
+        blocks,
+        neck,
+        neck_ps,
+        neck_st
+        )
+end
+
+
+function (self::ImageEncoderViT)(x::AbstractArray)
+
+    self.patch_embed.proj_ps.weight .= permutedims(
+        test_proj_weight,
+        (3, 4, 2, 1)
+        )
+
+    self.patch_embed.proj_ps.bias .= test_proj_bias
+    
+    x = self.patch_embed(x)
+
+    if !isnothing(self.pos_embed)
+        x = x.+ self.pos_embed
+    end
+
+    for i in 1:depth
+        x = self.blocks[i](x)
+    end
+
+    x = permutedims(x, (2, 3, 4, 1))
+
+    x, _ = Lux.apply(self.neck, x, self.neck_ps, self.neck_st)
+
+    return permutedims(x, (4, 3, 1, 2))
 end

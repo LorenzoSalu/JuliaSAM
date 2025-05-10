@@ -1,6 +1,7 @@
 using Lux
 using NPZ
 using Random
+using Statistics
 
 include("../global_functions.jl")
 
@@ -37,12 +38,12 @@ function MLPBlock(;
 
     # Per effettuare test decommentare
     ####################################################################
-    lin1_ps.weight .= test_lin1_weight
-    lin1_ps.bias .= test_lin1_bias
+    #lin1_ps.weight .= test_lin1_weight
+    #lin1_ps.bias .= test_lin1_bias
 
 
-    lin2_ps.weight .= test_lin2_weight 
-    lin2_ps.bias .= test_lin2_bias
+    #lin2_ps.weight .= test_lin2_weight 
+    #lin2_ps.bias .= test_lin2_bias
     ####################################################################
 
     return MLPBlock(
@@ -77,41 +78,31 @@ end
 ######################################################
 
 # Viene definita la struttura LayerNorm2d
-struct LayerNorm2d
-    weight::Union{Nothing, Vector{Float32}}
-    bias::Union{Nothing, Vector{Float32}}
+struct LayerNorm2d <: LuxCore.AbstractLuxLayer
+    num_channels::Int
     eps::Float32
 end
 
-function LayerNorm2d(
-    num_channels::Int,
-    eps::Float32 = 1e-6f0
-    )
 
-    weight = ones(Float32, num_channels)
-    bias = zeros(Float32, num_channels)
+LayerNorm2d(num_channels::Int) = LayerNorm2d(num_channels, 1f-6)
 
-    # Per effettuare test decommentare
-    #####################################
-    #weight = test_weight
-    #bias = test_bias
-    #####################################
-
-    return LayerNorm2d(
-        weight,
-        bias,
-        eps    
-    )
+function LuxCore.initialparameters(rng::AbstractRNG, l::LayerNorm2d)
+    return (weight=ones(Float32, l.num_channels),
+            bias=zeros(Float32, l.num_channels))
 end
 
-function(self::LayerNorm2d)(x::AbstractArray)::AbstractArray
+function Lux.apply(ln::LayerNorm2d, x, ps, st)
+    x = permutedims(x, (4, 3, 1, 2))
+    
     u = mean(x, dims=2)
     s = mean(((x .- u) .^ 2), dims=2)
-    x = (x .- u) ./ sqrt.(s .+ eps)
+    x = (x .- u) ./ sqrt.(s .+ ln.eps)
 
-    weight_expanded = reshape(self.weight, (1, :, 1, 1))
-    bias_expanded = reshape(self.bias, (1, :, 1, 1))
-
+    weight_expanded = reshape(ps.weight, (1, :, 1, 1))
+    bias_expanded = reshape(ps.bias, (1, :, 1, 1))
+    
     x = weight_expanded .* x .+ bias_expanded
-    return x
+    x = permutedims(x, (3, 4, 2, 1))
+    
+    return x, st
 end
