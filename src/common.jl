@@ -57,16 +57,28 @@ end
 
 function (self::MLPBlock)(x::AbstractArray)::AbstractArray
 
-    x = permutedims(x, (4, 1, 2, 3))
-    x, _ = self.lin1(x, self.lin1_ps, self.lin1_st)
-    x = permutedims(x, (2, 3, 4, 1))
+    if ndims(x) == 4
+        x = permutedims(x, (4, 1, 2, 3))
+        x, _ = self.lin1(x, self.lin1_ps, self.lin1_st)
+        x = permutedims(x, (2, 3, 4, 1))
 
-    x = self.act.(x)
+        x = self.act.(x)
 
-    x = permutedims(x, (4, 1, 2, 3))
-    y, = self.lin2(x, self.lin2_ps, self.lin2_st)
+        x = permutedims(x, (4, 1, 2, 3))
+        y, = self.lin2(x, self.lin2_ps, self.lin2_st)
 
-    y = permutedims(y, (2, 3, 4, 1))
+        y = permutedims(y, (2, 3, 4, 1))
+    end
+
+    if ndims(x) == 3
+        x = permutedims(x, (3, 1, 2))
+        x, _ = self.lin1(x, self.lin1_ps, self.lin1_st)
+        x = permutedims(x, (2, 3, 1))
+        x = self.act.(x)
+        x = permutedims(x, (3, 1, 2))
+        y, = self.lin2(x, self.lin2_ps, self.lin2_st)
+        y = permutedims(y, (2, 3, 1))
+    end
 
     return y
 end

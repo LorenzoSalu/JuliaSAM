@@ -29,6 +29,7 @@ imageEncoderTest/
 promptEncoderTest/
 maskDecoderTest/
 commonTest/
+transformerTest/
 
 # File appunti
 appuntiCodice.txt
