@@ -199,8 +199,9 @@ function PromptEncoder(;
 end
 
 function get_dense_pe(self::PromptEncoder)::AbstractArray
+	tmp = self.pe_layer(self.image_embedding_size)
 	return reshape(
-		self.pe_layer(self.image_embedding_size),
+		tmp,
 		(1, size(tmp)...),
 	)
 end
@@ -215,7 +216,6 @@ function _embed_points(
 	points = points .+ 0.5
 
 	if pad
-		####
 		device = isa(points, CuArray) ? CuArray : Array
 		padding_point = device(zeros(Float32, size(points, 1), 1, 2))
 

@@ -1,15 +1,16 @@
 using SpecialFunctions
+using LoopVectorization
 
 # Funzione per la permutazione degli array in ordine inverso
 function reverse_pos(a::AbstractArray)
-    return permutedims(a, Tuple(ndims(a):-1:1))
+    return permutedims(a, reverse(1:ndims(a)))
 end
 
 # Funzione per il reshape python-like
 function sam_reshape(a, dims)
-    a = reverse_pos(a)
-    a = reshape(a, reverse(dims))
-    a = reverse_pos(a)
+    b = PermutedDimsArray(a, reverse(1:ndims(a)))
+    a = reshape(b, reverse(dims))
+    a = permutedims(a, reverse(1:ndims(a)))
     return a
 end
 
@@ -20,7 +21,59 @@ end
 
 
 
+###########################################################
+# Assegnazione pesi e bias dal checkpoint
+###########################################################
+
+function assign_weight!(model, path_str::String, value)
+    parts = split(path_str, '.')
+    obj = model
+
+    for i = 1:length(parts)-1
+        part = parts[i]
+
+        # Gestione dell'indice (es: layers_ps[2])
+        if occursin('[', part)
+            base, idx_str = match(r"(\w+)\[(\d+)\]", part).captures
+            idx = parse(Int, idx_str)
+            obj = getproperty(obj, Symbol(base))[idx]
+        else
+            obj = getproperty(obj, Symbol(part))
+        end
+    end
+
+    # Ultimo campo: potrebbe essere .weight, .bias, ecc.
+    last_part = parts[end]
+    if occursin('[', last_part)
+        base, idx_str = match(r"(\w+)\[(\d+)\]", last_part).captures
+        idx = parse(Int, idx_str)
+        getproperty(obj, Symbol(base))[idx] .= value
+    else
+        getproperty(obj, Symbol(last_part)) .= value
+    end
+end
+
+
+
+function load_model_weights!(
+    model::Any, 
+    state_dict::Dict{String, Array{Float32}}
+    )
+
+    for (k, v) in state_dict
+        try
+            assign_weight!(model, k, v)
+        catch e
+            @warn "Errore assegnando $k" exception = e
+        end
+    end
+end
+
+
+##################################################
 # Funzione per facilitare i test
+##################################################
+
 function is_correct(string::String, x::AbstractArray, y::AbstractArray)
     println(
         string,

@@ -13,10 +13,10 @@ include("../src/prompt_encoder.jl")
 include("../src/common.jl")
 
 ########################################################
-# Attention:
+# _Attention:
 ########################################################
 
-struct Attention
+struct _Attention
 	embedding_dim::Int
 	internal_dim::Int
 	num_heads::Int
@@ -34,7 +34,7 @@ struct Attention
 	out_proj_st::NamedTuple
 end
 
-function Attention(;
+function _Attention(;
 	embedding_dim::Int,
 	num_heads::Int,
 	downsample_rate::Int = 1,
@@ -60,7 +60,7 @@ function Attention(;
 	out_proj = Dense(internal_dim => embedding_dim, init_weight = kaiming_uniform)
 	out_proj_ps, out_proj_st = Lux.setup(rng, out_proj)
 
-	return Attention(
+	return _Attention(
 		embedding_dim,
 		internal_dim,
 		num_heads,
@@ -75,7 +75,7 @@ function Attention(;
 	)
 end
 
-function (self::Attention)(;
+function (self::_Attention)(;
 	q::AbstractArray,
 	k::AbstractArray,
 	v::AbstractArray,
@@ -150,11 +150,11 @@ end
 
 
 struct TwoWayAttentionBlock
-	self_attn::Attention
+	self_attn::_Attention
     norm1::LayerNorm
     norm1_ps::NamedTuple
     norm1_st::NamedTuple
-    cross_attn_token_to_image::Attention
+    cross_attn_token_to_image::_Attention
     norm2::LayerNorm
     norm2_ps::NamedTuple
     norm2_st::NamedTuple
@@ -165,7 +165,7 @@ struct TwoWayAttentionBlock
     norm4::LayerNorm
     norm4_ps::NamedTuple
     norm4_st::NamedTuple
-    cross_attn_image_to_token::Attention
+    cross_attn_image_to_token::_Attention
     skip_first_layer_pe::Bool
 end
 
@@ -180,14 +180,14 @@ function TwoWayAttentionBlock(;
 
     rng = Random.MersenneTwister()
 
-	self_attn = Attention(
+	self_attn = _Attention(
         embedding_dim = embedding_dim, 
         num_heads = num_heads)
 
     norm1 = LayerNorm(embedding_dim, dims=1)
     norm1_ps, norm1_st = Lux.setup(rng, norm1)
 
-    cross_attn_token_to_image = Attention(
+    cross_attn_token_to_image = _Attention(
         embedding_dim = embedding_dim,
         num_heads = num_heads,
         downsample_rate = attention_downsample_rate
@@ -208,7 +208,7 @@ function TwoWayAttentionBlock(;
     norm4 = LayerNorm(embedding_dim, dims=1)
     norm4_ps, norm4_st = Lux.setup(rng, norm4)
 
-    cross_attn_image_to_token = Attention(
+    cross_attn_image_to_token = _Attention(
         embedding_dim = embedding_dim,
         num_heads = num_heads,
         downsample_rate = attention_downsample_rate
@@ -306,7 +306,7 @@ struct TwoWayTransformer
 	num_heads::Int
 	mlp_dim::Int
 	layers::Vector{TwoWayAttentionBlock}
-	final_attn_token_to_image::Attention
+	final_attn_token_to_image::_Attention
 	norm_final_attn::LayerNorm
 	norm_final_attn_ps::NamedTuple
 	norm_final_attn_st::NamedTuple
@@ -339,7 +339,7 @@ function TwoWayTransformer(;
 		)
 	end
 
-	final_attn_token_to_image = Attention(
+	final_attn_token_to_image = _Attention(
 		embedding_dim = embedding_dim,
 		num_heads = num_heads,
 		downsample_rate = attention_downsample_rate,

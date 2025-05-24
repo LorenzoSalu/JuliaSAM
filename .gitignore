@@ -30,9 +30,11 @@ promptEncoderTest/
 maskDecoderTest/
 commonTest/
 transformerTest/
+samTest/
 
 # File appunti
 appuntiCodice.txt
+model_parameter_keys.txt
 
 # File di vs code
 .vscode
