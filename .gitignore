@@ -31,6 +31,7 @@ maskDecoderTest/
 commonTest/
 transformerTest/
 samTest/
+amgTest/
 
 # File appunti
 appuntiCodice.txt
