@@ -32,6 +32,8 @@ commonTest/
 transformerTest/
 samTest/
 amgTest/
+onnxTest/
+transformsTest/
 
 # File appunti
 appuntiCodice.txt

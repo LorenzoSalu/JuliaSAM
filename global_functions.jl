@@ -20,6 +20,27 @@ function gelu_exact(x)
 end
 
 
+function safe_imresize(arr, new_size; method=Linear())
+    # Trova dimensioni non-singleton
+    non_singleton_dims = findall(size(arr) .> 1)
+    
+    if length(non_singleton_dims) == length(new_size)
+        # Estrai solo le dimensioni spaziali
+        spatial_data = 
+            dropdims(arr, dims = tuple(findall(size(arr) .== 1)...))
+    
+        # Ridimensiona
+        resized = imresize(spatial_data, new_size, method=method)
+        
+        # Ricostruisci con dimensioni originali
+        original_shape = collect(size(arr))
+        original_shape[non_singleton_dims] .= new_size
+        return reshape(resized, original_shape...)
+    else
+        error("Mismatch between non-singleton dimensions and target size")
+    end
+end
+
 
 ###########################################################
 # Assegnazione pesi e bias dal checkpoint

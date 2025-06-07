@@ -374,14 +374,9 @@ function calculate_stability_score(
 	high_masks = sum(high_masks, dims = ndims(high_masks))
 	intersections = vec(sum(high_masks, dims = ndims(high_masks) - 1))
 
-	is_correct(
-		"Intersections corretto? ", intersections, expected_intersections)
-
 	low_masks = masks .> (mask_threshold - threshold_offset)
 	low_masks = sum(low_masks, dims = ndims(low_masks))
 	unions = vec(sum(low_masks, dims = ndims(low_masks) - 1))
-
-	is_correct("unions corretto? ", unions, expected_unions)
 
 	return intersections ./ unions
 end

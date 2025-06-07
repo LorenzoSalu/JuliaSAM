@@ -210,7 +210,7 @@ function (self::MaskDecoder)(;
 )::Tuple{AbstractArray, AbstractArray}
 
 	masks, iou_pred = predict_mask(
-		self = self,
+		self,
 		image_embeddings = image_embeddings,
 		image_pe = image_pe,
 		sparse_prompt_embeddings = sparse_prompt_embeddings,
@@ -231,15 +231,14 @@ function (self::MaskDecoder)(;
 	return masks, iou_pred
 end
 
-function predict_mask(;
-	self::MaskDecoder,
+function predict_mask(
+	self::MaskDecoder;
 	image_embeddings::AbstractArray,
 	image_pe::AbstractArray,
 	sparse_prompt_embeddings::AbstractArray,
 	dense_prompt_embeddings::AbstractArray,
 )::Tuple{AbstractArray, AbstractArray}
 
-	# Concatenate output tokens
 	output_tokens =
 		cat(self.iou_token_ps.weight, self.mask_tokens_ps.weight; dims = 2)'
 
@@ -248,7 +247,6 @@ function predict_mask(;
 
 	tokens = cat(output_tokens, sparse_prompt_embeddings, dims = 2)
 
-	# Expand per-image data in batch direction to be per-mask
 	src = repeat(image_embeddings, size(tokens, 1), 1, 1, 1)
 
 	src = src + dense_prompt_embeddings
@@ -257,7 +255,6 @@ function predict_mask(;
 
 	b, c, h, w = size(src)
 
-	# Run the transformer
 	hs, src = self.transformer(
 		image_embedding = src,
 		image_pe = pos_src,
@@ -267,7 +264,6 @@ function predict_mask(;
 	iou_token_out = hs[:, 1, :]
 	mask_tokens_out = hs[:, 2:(1+self.num_mask_tokens), :]
 
-	# Upscale mask embeddings and predict masks using the mask tokens
 	src = permutedims(src, (1, 3, 2))
 	src = sam_reshape(src, (b, c, h, w))
 
@@ -303,7 +299,6 @@ function predict_mask(;
 
 	masks = sam_reshape(masks, (b, :, h, w))
 
-	# Generate mask quality predictions
 	iou_pred = self.iou_prediction_head(iou_token_out)
 
 	return masks, iou_pred
