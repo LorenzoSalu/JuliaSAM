@@ -239,6 +239,8 @@ function predict_mask(
 	dense_prompt_embeddings::AbstractArray,
 )::Tuple{AbstractArray, AbstractArray}
 
+	batch_size = size(image_embeddings, 1)
+	
 	output_tokens =
 		cat(self.iou_token_ps.weight, self.mask_tokens_ps.weight; dims = 2)'
 

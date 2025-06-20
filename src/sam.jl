@@ -22,10 +22,11 @@ struct Sam
 	image_encoder::ImageEncoderViT
 	prompt_encoder::PromptEncoder
 	mask_decoder::MaskDecoder
-	pixel_mean::Vector{Float32}
-	pixel_std::Vector{Float32}
+	pixel_mean::AbstractArray{Float32}
+	pixel_std::AbstractArray{Float32}
 	mask_threshold::Float32
 	image_format::String
+    device::Union{Nothing, String}
 end
 
 function Sam(;
@@ -38,6 +39,15 @@ function Sam(;
 	image_format::String = "RGB",
 )
 
+    if CUDA.has_cuda()
+        device = "gpu"
+    else
+        device = "cpu"
+    end
+
+    pixel_mean = reshape(pixel_mean, (:, 1, 1))
+    pixel_std = reshape(pixel_std, (:, 1, 1))
+
 	return Sam(
 		image_encoder,
 		prompt_encoder,
@@ -46,26 +56,35 @@ function Sam(;
 		Float32.(pixel_std),
 		mask_threshold,
 		image_format,
+        device
 	)
 end
 
 
-function preprocess(self::Sam, x::AbstractArray{Float32})
-
+function preprocess(self::Sam, x::AbstractArray)
 	# Normalize colors
-	x = (x .- self.pixel_mean) ./ self.pixel_std
+    if ndims(x) == 4
+    	x = 
+            (x .- 
+            reshape(self.pixel_mean, (1, size(self.pixel_mean)...))) ./ 
+            reshape(self.pixel_std, (1, size(self.pixel_std)...))
+
+    else
+    	x = (x .- self.pixel_mean) ./ self.pixel_std
+    end
 
 	h, w = size(x)[end-1:end]
 	padh = self.image_encoder.img_size .- h
 	padw = self.image_encoder.img_size .- w
 
-	x = NNlib.pad_zeros(x, (0, 0, padh, 0, padw, 0))
+    dims = (ndims(x), ndims(x)-1)
 
+    x = NNlib.pad_zeros(x, (0, padw, 0, padh), dims = dims)
 	return x
 end
 
-function postprocess_masks(;
-	self::Sam,
+function postprocess_masks(
+	self::Sam;
 	masks::AbstractArray,
 	input_size::Tuple{Int, Int},
 	original_size::Tuple{Int, Int},

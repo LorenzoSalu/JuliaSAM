@@ -12,10 +12,27 @@ using LoopVectorization
 
 include("../global_functions.jl")
 
+
+"""
 ########################################################
 # Block:
 ########################################################
 
+	Block{N1, N2, A, M}
+
+Defines a transformer block that combines multi-head self-attention, feedforward MLP, and two normalization layers. This design supports both global and window-based local attention mechanisms.
+
+# Fields
+- `norm1::N1`: First normalization layer (typically `LayerNorm`), applied before the attention module.
+- `norm1_ps::NamedTuple`: Parameters associated with the first normalization layer.
+- `norm1_st::NamedTuple`: State associated with the first normalization layer.
+- `norm2::N2`: Second normalization layer, applied before the MLP block.
+- `norm2_ps::NamedTuple`: Parameters associated with the second normalization layer.
+- `norm2_st::NamedTuple`: State associated with the second normalization layer.
+- `attn::A`: Multi-head self-attention module, which may use global or local attention depending on `window_size`.
+- `mlp::M`: Feedforward MLP block applied after the second normalization.
+- `window_size::Int`: If greater than `0`, local attention is applied using non-overlapping windows of this size. If `0`, global attention is used.
+"""
 struct Block{N1, N2, A, M}
 	norm1::N1
 	norm1_ps::NamedTuple
@@ -28,6 +45,43 @@ struct Block{N1, N2, A, M}
 	window_size::Int
 end
 
+
+"""
+	Block(; 
+		dim::Int, 
+		num_heads::Int, 
+		mlp_ratio::Float32=4.0f0, 
+		qkv_bias::Bool=true,
+		norm_layer::Type=LayerNorm, 
+		act_layer::Function=gelu_exact,
+		use_rel_pos::Bool=false, 
+		rel_pos_zero_init::Bool=true,
+		window_size::Int=0, 
+		input_size::Union{Nothing, Tuple{Int, Int}})
+
+Represents a Transformer block used in an image encoder architecture
+
+# Arguments
+- `dim::Int`: Dimensionality of the input embeddings.
+- `num_heads::Int`: Number of attention heads.
+- `mlp_ratio::Float32`: Ratio between the MLP hidden dimension and the input dimension. Default is `4.0`.
+- `qkv_bias::Bool`: If `true`, adds a bias term to the query, key, and value projections. Default is `true`.
+- `norm_layer::Type`: The normalization layer constructor (e.g., `LayerNorm`). Must be compatible with Lux. Default is `LayerNorm`.
+- `act_layer::Function`: Activation function used in the MLP block (e.g., `gelu_exact`). Default is `gelu_exact`.
+- `use_rel_pos::Bool`: If `true`, enables relative positional embeddings in the attention module. Default is `false`.
+- `rel_pos_zero_init::Bool`: If `true`, initializes relative positional parameters to zero. Default is `true`.
+- `window_size::Int`: Size of the attention window. If `0`, global attention is used. Otherwise, local attention is applied over square windows of this size.
+- `input_size::Union{Nothing, Tuple{Int, Int}}`: The spatial size of the input (height, width). Required when using global attention.
+
+
+# Returns
+A `Block` instance that encapsulates:
+- Two normalization layers (`norm1`, `norm2`)
+- A self-attention mechanism (`attn`)
+- A feedforward MLP layer (`mlp`)
+- Associated Lux parameters and states for the normalization layers
+- A window size configuration for switching between global and local attention
+"""
 function Block(;
 	dim::Int,
 	num_heads::Int,
@@ -75,6 +129,30 @@ function Block(;
 	)
 end
 
+
+"""
+	(block::Block)(x::AbstractArray)
+
+Applies the Transformer block to the input tensor `x`, performing normalization, attention, and MLP operations, optionally using windowed attention.
+
+# Arguments
+- `x::AbstractArray`: Input tensor of shape `(batch_size, height, width, channels)` or a compatible layout depending on the surrounding architecture.
+
+# Returns
+- The output tensor after applying the following operations:
+  1. First normalization (`norm1`)
+  2. Multi-head self-attention (`attn`)
+  3. Residual connection
+  4. Second normalization (`norm2`)
+  5. MLP feedforward network
+  6. Second residual connection
+
+# Processing Details
+- The input is first reshaped to match the expected format for normalization layers.
+- If `window_size > 0`, the attention is applied within local windows using `window_partition` and `window_unpartition`; otherwise, global attention is used.
+- The attention output is added back to the input (residual connection).
+- A second normalization and MLP are applied, followed by another residual addition.
+"""
 function (self::Block)(x::AbstractArray)
 
 	shortcut = x
@@ -119,12 +197,29 @@ function (self::Block)(x::AbstractArray)
 	return x
 end
 
-
+"""
 ########################################################
 # Attention: 
 ########################################################
 
-# Definizione struttura attention
+	struct Attention
+
+Defines a multi-head self-attention mechanism, with optional relative positional encoding, commonly used in vision transformer blocks.
+
+# Fields
+- `dim::Int`: Input and output embedding dimension.
+- `num_heads::Int`: Number of attention heads.
+- `scale::Float64`: Scaling factor applied to dot-product attention scores.
+- `qkv::Dense`: Linear projection that simultaneously computes queries, keys, and values.
+- `qkv_ps::NamedTuple`: Parameters for the `qkv` projection layer.
+- `qkv_st::NamedTuple`: State for the `qkv` projection layer.
+- `proj::Dense`: Output projection layer applied after attention.
+- `proj_ps::NamedTuple`: Parameters for the `proj` layer.
+- `proj_st::NamedTuple`: State for the `proj` layer.
+- `use_rel_pos::Bool`: Whether to use relative positional encodings.
+- `rel_pos_h::Union{Nothing, Matrix{Float32}}`: Relative positional embeddings for height (optional).
+- `rel_pos_w::Union{Nothing, Matrix{Float32}}`: Relative positional embeddings for width (optional).
+"""
 struct Attention
 	dim::Int
 	num_heads::Int
@@ -141,6 +236,31 @@ struct Attention
 end
 
 
+"""
+	Attention(
+		dim::Int; 
+		num_heads::Int = 8, 
+		qkv_bias::Bool = true,
+		use_rel_pos::Bool = false, 
+		rel_pos_zero_init::Bool = true,
+		input_size::Union{Nothing, Tuple{Int, Int}} = nothing)
+
+Creates a multi-head self-attention module, with optional 2D relative positional encodings for vision models.
+
+# Arguments
+- `dim::Int`: The input/output embedding dimension.
+- `num_heads::Int`: Number of attention heads. Default is `8`.
+- `qkv_bias::Bool`: If `true`, includes a learnable bias in the Q, K, V projections. Default is `true`.
+- `use_rel_pos::Bool`: If `true`, enables 2D relative positional encoding. Default is `false`.
+- `rel_pos_zero_init::Bool`: If `true`, initializes relative positional embeddings to zeros. Default is `true`.
+- `input_size::Union{Nothing, Tuple{Int, Int}}`: Spatial dimensions (height, width) of the input, required if `use_rel_pos == true`.
+
+# Returns
+An `Attention` instance including:
+- Learnable projection layers for QKV and output
+- Optional 2D relative positional encodings
+- Pre-initialized parameter and state tuples for Lux
+"""
 function Attention(
 	dim::Int;
 	num_heads::Int = 8,
@@ -188,7 +308,29 @@ function Attention(
 	)
 end
 
+"""
+    (attn::Attention)(x::AbstractArray)
 
+Applies the multi-head self-attention mechanism to the input tensor `x`, with optional 2D relative positional encoding.
+
+# Arguments
+- `x::AbstractArray`: Input tensor of shape `(B, H, W, C)`, where:
+  - `B`: Batch size
+  - `H`, `W`: Spatial dimensions (height and width)
+  - `C`: Channel or embedding dimension
+
+# Returns
+- `x::AbstractArray`: Output tensor of shape `(B, H, W, C)` after attention and final projection.
+
+# Processing Steps
+1. The input is projected to queries, keys, and values using a shared linear layer (`qkv`).
+2. The projections are reshaped and split across `num_heads` for multi-head attention.
+3. Scaled dot-product attention scores are computed
+4. If `use_rel_pos == true`, relative positional embeddings are added to the attention scores.
+5. Softmax is applied along the last axis of the attention scores.
+6. The attention output is computed and reshaped back to match the original spatial dimensions.
+7. A final linear projection (`proj`) is applied to mix attention heads and produce the output embedding.
+"""
 function (self::Attention)(x::AbstractArray)
 
 	B, H, W, _ = size(x)
@@ -252,12 +394,34 @@ function (self::Attention)(x::AbstractArray)
 end
 
 
+
+"""
 ########################################################
-# window_partition: 
-# divide la finestra a in partizioni più piccole 
+# window_partition
 ########################################################
 
-# Viene definita la funzione window_partition
+    window_partition(x::AbstractArray, window_size::Int) 
+        -> Tuple{AbstractArray, Tuple{Int, Int}}
+
+Partitions the spatial dimensions of the input tensor into non-overlapping windows of size `window_size x window_size`, optionally applying padding to handle edge cases.
+
+# Arguments
+- `x::AbstractArray`: Input tensor of shape `(B, H, W, C)`, where:
+  - `B`: Batch size
+  - `H`, `W`: Spatial dimensions (height and width)
+  - `C`: Number of channels or embedding dimension
+- `window_size::Int`: Size of each window along the spatial dimensions.
+
+# Returns
+- `windows::AbstractArray`: A tensor of shape `(N, window_size, window_size, C)`, where `N` is the total number of windows across all batches and spatial positions.
+- `(Hp, Wp)::Tuple{Int, Int}`: The padded height and width of the input, after applying necessary padding for full window coverage.
+
+# Processing Steps
+1. Computes how much padding is needed along height and width to make `H` and `W` divisible by `window_size`.
+2. Applies zero-padding to the input tensor if needed.
+3. Reshapes the padded tensor to extract non-overlapping windows of the specified size.
+4. Permutes and reshapes the tensor to flatten batch and spatial grid into a single window batch dimension.
+"""
 function window_partition(
 	x::AbstractArray,
 	window_size::Int,
@@ -294,12 +458,37 @@ end
 
 
 
+
+"""
 ########################################################
 # window_unpartition: 
-# Ricostruisce la finestra a partire dalle partizioni 
 ########################################################
 
-# Viene definita la funzione window_unpartition
+    window_unpartition(
+        windows::AbstractArray,
+        window_size::Int,
+        pad_hw::Tuple{Int, Int},
+        hw::Tuple{Int, Int},
+    ) -> AbstractArray
+
+Reconstructs the original (possibly padded) tensor from non-overlapping windowed partitions.
+
+# Arguments
+- `windows::AbstractArray`: Input tensor of shape `(N, window_size, window_size, C)`, where `N` is the number of windows and `C` is the channel dimension.
+- `window_size::Int`: Size of the square windows along height and width.
+- `pad_hw::Tuple{Int, Int}`: Tuple `(Hp, Wp)` specifying the padded height and width used during window partitioning.
+- `hw::Tuple{Int, Int}`: Tuple `(H, W)` specifying the original (unpadded) height and width of the input.
+
+# Returns
+- `x::AbstractArray`: Reconstructed tensor of shape `(B, H, W, C)`, where `B` is the batch size.
+
+# Processing Steps
+1. Computes the batch size `B` from the number of windows and padded dimensions.
+2. Reshapes the windows back into a grid structure per batch sample.
+3. Permutes the dimensions to align window rows and columns correctly.
+4. Merges the grid structure into a single tensor of shape `(B, Hp, Wp, C)`.
+5. If padding was applied during partitioning, it is now removed to recover the original spatial dimensions `(H, W)`.
+"""
 function window_unpartition(
 	windows::AbstractArray,
 	window_size::Int,
@@ -339,14 +528,42 @@ function window_unpartition(
 end
 
 
-
+"""
 ########################################################
-# add_decompose_rel_pos: definito per implementare 
-# la “Decompose Relative Positional Embeddings”.
-# sfruttando il concetto di attenzione 
+# add_decompose_rel_pos
 ########################################################
 
-# Viene definita la funzione add_decompose_rel_pos
+	add_decompose_rel_pos(
+        attn::AbstractArray,
+        q::AbstractArray,
+        rel_pos_h::AbstractArray,
+        rel_pos_w::AbstractArray,
+        q_size::Tuple{Int, Int},
+        k_size::Tuple{Int, Int},
+    ) -> AbstractArray
+
+Adds decomposed relative positional embeddings to the attention map along the height and width axes.
+
+# Arguments
+- `attn::AbstractArray`: Raw attention scores of shape `(B * num_heads, Q, K)`, where `Q = q_h * q_w` and `K = k_h * k_w`.
+- `q::AbstractArray`: Query tensor of shape `(B * num_heads, Q, head_dim)`.
+- `rel_pos_h::AbstractArray`: Relative positional embeddings for the height axis of shape `(2 * k_h - 1, head_dim)`.
+- `rel_pos_w::AbstractArray`: Relative positional embeddings for the width axis of shape `(2 * k_w - 1, head_dim)`.
+- `q_size::Tuple{Int, Int}`: Tuple `(q_h, q_w)` representing the spatial size of the query.
+- `k_size::Tuple{Int, Int}`: Tuple `(k_h, k_w)` representing the spatial size of the key.
+
+# Returns
+- `attn_final::AbstractArray`: Modified attention map of shape `(B * num_heads, Q, K)` with relative positional bias added.
+
+# Processing Steps
+1. Retrieves positional embeddings using `get_rel_pos` for both height and width axes, based on query/key sizes.
+2. Reshapes `q` into a 4D tensor `(B, q_h, q_w, head_dim)` to align with spatial structure.
+3. Uses Einstein summation (`@einsum`) to compute positional attention components:
+   - `rel_h`: Contribution from relative height embeddings.
+   - `rel_w`: Contribution from relative width embeddings.
+4. Reshapes the attention tensor to 5D `(B, q_h, q_w, k_h, k_w)` and adds `rel_h` and `rel_w` using broadcasting.
+5. Flattens the spatial dimensions to return the final 2D attention map.
+"""
 function add_decompose_rel_pos(
 	attn::AbstractArray, # Mappa di attenzione
 	q::AbstractArray, # Tensore che rappresenta la query
@@ -393,14 +610,37 @@ function add_decompose_rel_pos(
 end
 
 
-
+"""
 ########################################################
-# get_rel_pos: 
-# Viene eseguito il calcolo delle posizioni relative tra tutte le q e k
-# Tramite le posizioni relative viene calcolato il valore degli embeddings
+# get_rel_pos
 ########################################################
 
-# Viene definita la funzione get_rel_pos
+    get_rel_pos(
+        q_size::Int,
+        k_size::Int,
+        rel_pos::AbstractArray,
+    ) -> AbstractArray
+
+Retrieves the resized or indexed relative positional embeddings for a given query-key size configuration.
+
+# Arguments
+- `q_size::Int`: Spatial size of the query (number of patches along a dimension, e.g., height or width).
+- `k_size::Int`: Spatial size of the key.
+- `rel_pos::AbstractArray`: Relative positional embedding tensor of shape `(L, C)`, where:
+    - `L` is the number of relative distances supported.
+    - `C` is the embedding dimension (typically equal to head_dim).
+
+# Returns
+- `result::AbstractArray`: A tensor of shape `(q_size, k_size, C)` representing the selected (or interpolated) relative positional embeddings for all query-key pairs.
+
+# Processing Steps
+1. Computes the maximum number of relative positions needed: `2 * max(q_size, k_size) - 1`.
+2. Checks if the provided `rel_pos` has the correct length (`L`). If not, resizes it using `resize_rel_pos` to match the target length.
+3. Computes floating-point coordinates for the query and key positions, scaled to match each other when sizes differ.
+4. Computes relative coordinates between each query and key position.
+5. Adjusts the coordinates to be used as indices and casts them to integers.
+6. Constructs a 3D tensor where each slice along the last dimension contains the relative positional embedding for that relative distance.
+"""
 function get_rel_pos(
 	q_size::Int,
 	k_size::Int,
@@ -458,12 +698,26 @@ function get_rel_pos(
 end
 
 
+"""
 ########################################################
-# resize_rel_pos: 
-# Restituisce l' interpolazione ottuta per scalare la matrice
+# resize_rel_pos
 ########################################################
 
-# Viene definita la funzione resize_rel_pos
+    resize_rel_pos(rel_pos::AbstractArray{T, 2}, max_rel_dist::Int) where T
+
+Interpolates a 2D matrix of relative positional embeddings to match a target maximum relative distance.
+
+# Arguments
+- `rel_pos::AbstractArray{T, 2}`: A matrix of shape (L, C), where L is the number of original relative positions
+  and C is the embedding dimension.
+- `max_rel_dist::Int`: The target number of relative positions after resizing.
+
+# Returns
+- `AbstractArray{Float32, 2}`: A resized matrix of shape (max_rel_dist, C) containing interpolated embeddings.
+
+# Description
+This function rescales the input relative positional encoding matrix to the desired `max_rel_dist` using linear interpolation.
+"""
 function resize_rel_pos(rel_pos::AbstractArray{T, 2}, max_rel_dist::Int) where T
 
 	in_len = size(rel_pos, 1) # Taglia prima dimensione di rel_pos
@@ -491,22 +745,50 @@ function resize_rel_pos(rel_pos::AbstractArray{T, 2}, max_rel_dist::Int) where T
 end
 
 
-
+"""
 ########################################################
-# PatchEmbed: definito per implementare l'embedding delle patch dell'immagine
-# con embedding si intende la rappresentazione delle patch come vettori numerici
-# Serve per applicare una convoluzione 2D alle patch dell'immagine
+# PatchEmbed
 ########################################################
 
-# Viene definito un tipo strutturato PatchEmbed
-# Rappresenta un layer di embedding per le patch dell'immagine
+    struct PatchEmbed
+
+A module that embeds input images into patch embeddings using a convolutional layer.
+
+# Fields
+- `proj::Conv`: Convolutional layer that projects input patches to embedding space.
+- `proj_ps::NamedTuple`: Parameters for convolution, used during forward pass.
+- `proj_st::NamedTuple`: State information for convolution, used during forward pass.
+"""
 struct PatchEmbed
 	proj::Conv # proj è un campo di tipo Conv
 	proj_ps::NamedTuple
 	proj_st::NamedTuple
 end
 
-# Costruttore per PatchEmbed con parametri di default
+
+
+"""
+    PatchEmbed(; kernel_size::Tuple{Int, Int} = (16, 16),
+                stride::Tuple{Int, Int} = (16, 16),
+                padding::Tuple{Int, Int} = (0, 0),
+                in_chans::Int = 3,
+                embed_dim::Int = 768)
+
+Constructor for `PatchEmbed`.
+
+# Arguments
+- `kernel_size::Tuple{Int, Int}`: Size of the convolutional kernel (height, width). Defaults to (16, 16).
+- `stride::Tuple{Int, Int}`: Stride of the convolution. Defaults to (16, 16).
+- `padding::Tuple{Int, Int}`: Padding applied to the input (height, width). Defaults to (0, 0).
+- `in_chans::Int`: Number of input channels. Defaults to 3 (e.g., RGB images).
+- `embed_dim::Int`: Number of output embedding dimensions. Defaults to 768.
+
+# Returns
+- An instance of `PatchEmbed` initialized with a convolutional layer configured to embed input patches.
+
+# Description
+The constructor creates a convolutional layer (`proj`) with specified kernel size, stride, and padding.
+"""
 function PatchEmbed(;
 	kernel_size::Tuple{Int, Int} = (16, 16),
 	stride::Tuple{Int, Int} = (16, 16),
@@ -533,7 +815,23 @@ function PatchEmbed(;
 	return PatchEmbed(proj, proj_ps, proj_st)
 end
 
-# Viene definito il forward pass per PatchEmbed
+
+"""
+    (self::PatchEmbed)(x::AbstractArray)
+
+Applies the patch embedding convolution to the input tensor.
+
+# Arguments
+- `x::AbstractArray`: Input tensor with shape assumed to be (Batch, Height, Width, Channels).
+
+# Returns
+- Output tensor with patches embedded into the specified embedding dimension.
+  
+# Description
+- The input tensor is permuted from (Batch, Height, Width, Channels) to (Channels, Batch, Height, Width) to fit the convolution layer input expectations.
+- The convolution layer (`proj`) is applied.
+- The output is permuted back to (Batch, Height, Width, Embedding_dim).
+"""
 function (self::PatchEmbed)(x::AbstractArray)
 	x = permutedims(x, (3, 4, 2, 1))
 	y, _ = self.proj(x, self.proj_ps, self.proj_st)
@@ -542,10 +840,26 @@ end
 
 
 
+
+"""
 ########################################################
 # imageEncoderViT:
 ########################################################
 
+    struct ImageEncoderViT
+
+Vision Transformer (ViT) encoder for images, including patch embedding, transformer blocks, 
+positional embeddings, and a convolutional neck for feature refinement.
+
+# Fields
+- `img_size::Int`: Size of the input square image.
+- `patch_embed::PatchEmbed`: Module to extract patch embeddings from the image.
+- `pos_embed::Union{Nothing, Array{Float32}}`: Optional absolute positional embeddings.
+- `blocks::Vector{Block}`: Sequence of transformer blocks processing the patches.
+- `neck::Chain`: Multi-layer convolutional module for feature refinement.
+- `neck_ps::NamedTuple`: Parameters for the `neck` module.
+- `neck_st::NamedTuple`: State for the `neck` module.
+"""
 struct ImageEncoderViT
 	img_size::Int
 	patch_embed::PatchEmbed
@@ -557,6 +871,48 @@ struct ImageEncoderViT
 end
 
 
+
+"""
+    ImageEncoderViT(; img_size::Int=1024,
+                   patch_size::Int=16,
+                   in_chans::Int=3,
+                   embed_dim::Int=768,
+                   depth::Int=12,
+                   num_heads::Int=12,
+                   mlp_ratio::Float32=4.0f0,
+                   out_chans::Int=256,
+                   qkv_bias::Bool=true,
+                   norm_layer::Type=LayerNorm,
+                   act_layer::Function=gelu_exact,
+                   use_abs_pos::Bool=true,
+                   use_rel_pos::Bool=false,
+                   rel_pos_zero_init::Bool=true,
+                   window_size::Int=0,
+                   global_attn_indexes::NTuple{N, Int} where N=())
+
+Constructor for `ImageEncoderViT`.
+
+# Arguments
+- `img_size`: Size of the square input image (default 1024).
+- `patch_size`: Size of each square patch (default 16).
+- `in_chans`: Number of input channels (default 3).
+- `embed_dim`: Dimension of patch embeddings (default 768).
+- `depth`: Number of transformer blocks (default 12).
+- `num_heads`: Number of multi-head attention heads (default 12).
+- `mlp_ratio`: MLP expansion ratio relative to `embed_dim` (default 4.0).
+- `out_chans`: Number of output channels after convolutional neck (default 256).
+- `qkv_bias`: Use bias for QKV matrices (default true).
+- `norm_layer`: Type of normalization layer (default `LayerNorm`).
+- `act_layer`: Activation function (default `gelu_exact`).
+- `use_abs_pos`: Use absolute positional embeddings (default true).
+- `use_rel_pos`: Use relative positional embeddings (default false).
+- `rel_pos_zero_init`: Initialize relative positional embeddings to zero (default true).
+- `window_size`: Window size for local attention (default 0).
+- `global_attn_indexes`: Indices of blocks with global attention (default empty).
+
+# Returns
+- An instance of `ImageEncoderViT` ready for the forward pass.
+"""
 function ImageEncoderViT(;
 	img_size::Int = 1024,
 	patch_size::Int = 16,
@@ -643,6 +999,24 @@ function ImageEncoderViT(;
 end
 
 
+"""
+    (self::ImageEncoderViT)(x::AbstractArray)
+
+Forward pass of the ViT image encoder.
+
+# Arguments
+- `x::AbstractArray`: Input image tensor with dimensions (Batch, Height, Width, Channels).
+
+# Returns
+- Feature tensor after processing through transformer blocks and convolutional neck,
+  with dimensions (Batch, Channels, Height, Width).
+
+# Description
+- Applies patch embedding to the input.
+- Adds absolute positional embeddings if present.
+- Passes the result through each transformer block.
+- Applies the convolutional neck module with necessary dimension permutations.
+"""
 function (self::ImageEncoderViT)(x::AbstractArray)
 
 	x = self.patch_embed(x)
@@ -652,6 +1026,7 @@ function (self::ImageEncoderViT)(x::AbstractArray)
 	end
 
 	for i in 1:length(self.blocks)
+		println(i)
 		x = self.blocks[i](x)
 	end
 
