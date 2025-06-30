@@ -63,7 +63,8 @@ Inserts or updates a key–value pair in the `MaskData` container.
 
 # Arguments
 - `md::MaskData`: The `MaskData` object to be modified.
-- `item::Any`: The value to assign. Must be an `AbstractArray`, `Vector`, or `CuArray`.
+- `item::Any`: The value to assign. Must be an `AbstractArray`, `Vector`, or 
+	`CuArray`.
 - `key::String`: The string key under which to store the value.
 
 # Behavior
@@ -88,7 +89,8 @@ Retrieves the value associated with a given key in the `MaskData` object.
 - `key::String`: The key whose associated value is to be returned.
 
 # Returns
-- The array-like object (e.g., `Vector`, `AbstractArray`, or `CuArray`) stored under `key`.
+- The array-like object (e.g., `Vector`, `AbstractArray`, or `CuArray`) stored 
+	under `key`.
 """
 function Base.getindex(md::MaskData, key::String)
 	return md._stats[key]
@@ -132,17 +134,22 @@ end
 """
     filter!(md::MaskData, keep::AbstractArray)
 
-Filters the contents of the `MaskData` container in-place based on the boolean or index array `keep`.
+Filters the contents of the `MaskData` container in-place based on the boolean 
+	or index array `keep`.
 
 # Arguments
 - `md::MaskData`: The container to be filtered.
-- `keep::AbstractArray`: An array specifying which elements to retain. Can be a boolean mask or an array of indices.
+- `keep::AbstractArray`: An array specifying which elements to retain. Can be a 
+	boolean mask or an array of indices.
 
 # Behavior
 - If the stored value is `nothing`, it is preserved as `nothing`.
-- If the value is an `AbstractArray` or `CuArray`, the array is indexed along its first dimension using `keep`.
-- If the value is a `Vector` and `keep` is a boolean mask, only the elements at positions where `keep[i]` is `true` are retained.
-- If the value is a `Vector` and `keep` is an index array, the corresponding elements are selected.
+- If the value is an `AbstractArray` or `CuArray`, the array is indexed along 
+	its first dimension using `keep`.
+- If the value is a `Vector` and `keep` is a boolean mask, only the elements at 
+	positions where `keep[i]` is `true` are retained.
+- If the value is a `Vector` and `keep` is an index array, the corresponding 
+	elements are selected.
 - Any unsupported type raises an `ArgumentError`.
 """
 function filter!(md::MaskData, keep::AbstractArray)
@@ -166,16 +173,21 @@ end
 """
     cat!(md::MaskData, new_stats::MaskData)
 
-Concatenates the contents of another `MaskData` instance into the current one, modifying it in-place.
+Concatenates the contents of another `MaskData` instance into the current one, 
+	modifying it in-place.
 
 # Arguments
-- `md::MaskData`: The target `MaskData` container to which data will be appended.
-- `new_stats::MaskData`: The source `MaskData` whose values will be concatenated.
+- `md::MaskData`: The target `MaskData` container to which data will be 
+	appended.
+- `new_stats::MaskData`: The source `MaskData` whose values will be 
+	concatenated.
 
 # Behavior
 - For each key in `new_stats`:
-  - If the key is not present in `md` or its value is `nothing`, the value is deep-copied from `new_stats`.
-  - If the value is an `AbstractArray` or `CuArray`, it is concatenated using `vcat`.
+  - If the key is not present in `md` or its value is `nothing`, the value is 
+  deep-copied from `new_stats`.
+  - If the value is an `AbstractArray` or `CuArray`, it is concatenated using 
+  `vcat`.
   - If the value is a `Vector`, it is deep-copied and concatenated using `vcat`.
   - If the value type is unsupported, an `ArgumentError` is raised.
 """
@@ -198,14 +210,16 @@ end
 """
     to_array!(md::MaskData)
 
-Converts all values stored in the `MaskData` instance from `CuArray` to standard `Array`, modifying the structure in-place.
+Converts all values stored in the `MaskData` instance from `CuArray` to 
+	standard `Array`, modifying the structure in-place.
 
 # Arguments
 - `md::MaskData`: The `MaskData` container to be modified.
 
 # Behavior
 - Iterates over all key-value pairs.
-- If a value is a `CuArray`, it is converted to a standard `Array` using `Array(v)`.
+- If a value is a `CuArray`, it is converted to a standard `Array` using `Array
+	(v)`.
 - Other types are left unchanged.
 """
 function to_array!(md::MaskData)
@@ -222,12 +236,14 @@ end
 Computes bounding boxes in XYXY format for each mask in a batch of masks.
 
 # Arguments
-- `masks::AbstractArray`: An N-dimensional tensor representing a batch of binary masks.
-  The last two dimensions represent the height (H) and width (W) of each mask.
-  Masks are expected to have values indicating the mask presence (e.g., 0 or 1).
+- `masks::AbstractArray`: An N-dimensional tensor representing a batch of 
+	binary masks. The last two dimensions represent the height (H) and width 
+	(W) of each mask. Masks are expected to have values indicating the mask 
+	presence (e.g., 0 or 1).
 
 # Returns
-- An array of shape `C1 × C2 × ... × 4` where `C1, C2, ...` represent any leading batch dimensions of `masks`.
+- An array of shape `C1 × C2 × ... × 4` where `C1, C2, ...` represent any 
+	leading batch dimensions of `masks`.
 - Each bounding box is in the format `[x_min, y_min, x_max, y_max]`.
 - For empty masks (no positive pixels), the bounding box is `[0, 0, 0, 0]`.
 """
@@ -290,9 +306,11 @@ end
 Encodes an uncompressed Run-Length Encoding (RLE) mask into the COCO RLE format.
 
 # Arguments
-- `uncompressed_rle::Dict{String, <:Any}`: A dictionary representing the uncompressed RLE mask.
+- `uncompressed_rle::Dict{String, <:Any}`: A dictionary representing the 
+uncompressed RLE mask.
   Expected to contain at least:
-  - `"size"`: a tuple or array `(height, width)` representing the mask dimensions.
+  - `"size"`: a tuple or array `(height, width)` representing the mask 
+  dimensions.
   - `"counts"`: the uncompressed RLE counts.
 
 # Returns
@@ -318,15 +336,18 @@ end
 Removes small connected regions from a binary mask based on an area threshold.
 
 # Arguments
-- `mask::AbstractArray`: Binary mask array where the regions to process are defined.
-- `area_thresh::Float32`: Minimum area threshold. Regions smaller than this are removed.
+- `mask::AbstractArray`: Binary mask array where the regions to process are 
+	defined.
+- `area_thresh::Float32`: Minimum area threshold. Regions smaller than this are 
+	removed.
 - `mode::String`: Either `"holes"` or `"islands"`.
     - `"holes"`: Removes small holes (background regions inside foreground).
     - `"islands"`: Removes small islands (foreground regions inside background).
 
 # Returns
 - A tuple `(filtered_mask, changed)` where:
-    - `filtered_mask::AbstractArray`: The binary mask after removing small regions.
+    - `filtered_mask::AbstractArray`: The binary mask after removing small 
+	regions.
     - `changed::Bool`: `true` if any region was removed, `false` otherwise.
 """
 function remove_small_regions(
@@ -368,20 +389,25 @@ end
     connected_components_with_stats(
 		mask::Matrix{Int}) -> Tuple{Int, Matrix{Int}, Matrix{Int}}
 
-Computes connected components of a binary mask and returns statistics for each component.
+Computes connected components of a binary mask and returns statistics for each 
+	component.
 
 # Arguments
-- `mask::Matrix{Int}`: Binary mask (integer matrix) where connected components are identified.
+- `mask::Matrix{Int}`: Binary mask (integer matrix) where connected components 
+	are identified.
 
 # Returns
-- `n_labels::Int`: Number of connected components found (excluding background label 0).
-- `components::Matrix{Int}`: Matrix of the same size as `mask`, where each pixel is labeled with its component index (0 for background).
-- `stats::Matrix{Int}`: Matrix of size `(n_labels+1, 5)` where each row corresponds to a component and columns represent:
-    1. `left` (x coordinate of bounding box)
-    2. `top` (y coordinate of bounding box)
-    3. `width` of bounding box
-    4. `height` of bounding box
-    5. `area` (number of pixels in the component)
+- `n_labels::Int`: Number of connected components found (excluding background 
+	label 0).
+- `components::Matrix{Int}`: Matrix of the same size as `mask`, where each 
+	pixel is labeled with its component index (0 for background).
+- `stats::Matrix{Int}`: Matrix of size `(n_labels+1, 5)` where each row 
+	corresponds to a component and columns represent:
+		1. `left` (x coordinate of bounding box)
+		2. `top` (y coordinate of bounding box)
+		3. `width` of bounding box
+		4. `height` of bounding box
+		5. `area` (number of pixels in the component)
 
 The first row corresponds to the background (label 0).
 """
@@ -424,22 +450,31 @@ end
 
 
 """
-    uncrop_masks(masks::AbstractArray, crop_box::Vector{Int}, orig_h::Int, orig_w::Int) -> AbstractArray
+    uncrop_masks(
+		masks::AbstractArray,
+		crop_box::Vector{Int}, 
+		orig_h::Int, 
+		orig_w::Int) -> AbstractArray
 
-Restores masks cropped to a bounding box back to their original spatial dimensions by padding zeros around them.
+Restores masks cropped to a bounding box back to their original spatial 
+	dimensions by padding zeros around them.
 
 # Arguments
 - `masks::AbstractArray`: The cropped masks array.
-- `crop_box::Vector{Int}`: Bounding box `[x0, y0, x1, y1]` that was used for cropping.
+- `crop_box::Vector{Int}`: Bounding box `[x0, y0, x1, y1]` that was used for 
+	cropping.
 - `orig_h::Int`: Original height of the image before cropping.
 - `orig_w::Int`: Original width of the image before cropping.
 
 # Returns
-- `AbstractArray`: The masks padded back to the original size `(orig_h, orig_w)`.
+- `AbstractArray`: The masks padded back to the original size 
+	`(orig_h, orig_w)`.
 
 # Behavior
-- If the crop box corresponds to the full original image (no cropping), the function returns the input masks unchanged.
-- Otherwise, it pads the cropped masks with zeros to restore them to the original dimensions.
+- If the crop box corresponds to the full original image (no cropping), the 
+	function returns the input masks unchanged.
+- Otherwise, it pads the cropped masks with zeros to restore them to the 
+	original dimensions.
 """
 function uncrop_masks(
 	masks::AbstractArray, crop_box::Vector{Int}, orig_h::Int, orig_w::Int,
@@ -462,14 +497,17 @@ end
 """
     uncrop_points(points::AbstractArray, crop_box::Vector{Int}) -> AbstractArray
 
-Adjusts coordinates of points that were cropped within a bounding box, restoring them to the original coordinate system by adding the crop offset.
+Adjusts coordinates of points that were cropped within a bounding box, 
+	restoring them to the original coordinate system by adding the crop offset.
 
 # Arguments
-- `points::AbstractArray`: Array of points coordinates, typically of shape `(N, 2)` or `(batch_size, N, 2)`.
+- `points::AbstractArray`: Array of points coordinates, typically of shape 
+	`(N, 2)` or `(batch_size, N, 2)`.
 - `crop_box::Vector{Int}`: Bounding box `[x0, y0, x1, y1]` used for cropping.
 
 # Returns
-- `AbstractArray`: Points coordinates shifted by `(x0, y0)` offset, mapping them back to the original image space.
+- `AbstractArray`: Points coordinates shifted by `(x0, y0)` offset, mapping 
+	them back to the original image space.
 """
 function uncrop_points(
 	points::AbstractArray, crop_box::Vector{Int},
@@ -496,14 +534,19 @@ end
 		boxes::AbstractArray, 
 		crop_box::Vector{Int}) -> AbstractArray
 
-Restores bounding boxes, cropped within a specified box, to the original coordinate space by adding the crop offset. The boxes are expected in XYXY format `[x_min, y_min, x_max, y_max]`.
+Restores bounding boxes, cropped within a specified box, to the original 
+	coordinate space by adding the crop offset. The boxes are expected in XYXY 
+	format `[x_min, y_min, x_max, y_max]`.
 
 # Arguments
-- `boxes::AbstractArray`: Array of bounding boxes, shape `(N, 4)` or `(batch_size, N, 4)`.
-- `crop_box::Vector{Int}`: Crop bounding box `[x0, y0, x1, y1]` applied previously.
+- `boxes::AbstractArray`: Array of bounding boxes, shape `(N, 4)` or 
+	`(batch_size, N, 4)`.
+- `crop_box::Vector{Int}`: Crop bounding box `[x0, y0, x1, y1]` applied 
+	previously.
 
 # Returns
-- `AbstractArray`: Bounding boxes shifted by `(x0, y0, x0, y0)` offset, mapping them back to original image coordinates.
+- `AbstractArray`: Bounding boxes shifted by `(x0, y0, x0, y0)` offset, mapping 
+	them back to original image coordinates.
 """
 function uncrop_boxes_xyxy(
 	boxes::AbstractArray,
@@ -532,14 +575,18 @@ end
 Generates a list of crop boxes of varying sizes for multi-scale image cropping.
 
 # Arguments
-- `im_size::Tuple{Int, Int}`: Tuple `(height, width)` representing the original image dimensions.
-- `n_layers::Int`: Number of crop layers. Each layer subdivides the image into progressively smaller crop boxes.
-- `overlap_ratio::Float32`: Fraction of the crop box size that crops should overlap.
+- `im_size::Tuple{Int, Int}`: Tuple `(height, width)` representing the original 
+	image dimensions.
+- `n_layers::Int`: Number of crop layers. Each layer subdivides the image into 
+	progressively smaller crop boxes.
+- `overlap_ratio::Float32`: Fraction of the crop box size that crops should 
+	overlap.
 
 # Returns
 - `Tuple{Vector{Vector{Int}}, Vector{Int}}`:
   - A vector of crop boxes, each defined as `[x0, y0, x1, y1]`.
-  - A vector of integers indicating the layer index for each crop box (0 for the full image, then 1 to `n_layers` for the subdivided layers).
+  - A vector of integers indicating the layer index for each crop box (0 for 
+  	the full image, then 1 to `n_layers` for the subdivided layers).
 """
 function generate_crop_boxes(
 	im_size::Tuple{Int, Int},
@@ -582,7 +629,8 @@ end
     crop_len(orig_len::Int, n_crops::Int, overlap::Int) -> Int
 
 Calculates the length of each crop box dimension, given the original dimension,
-the number of crops along that dimension, and the overlap in pixels between adjacent crops.
+the number of crops along that dimension, and the overlap in pixels between 
+	adjacent crops.
 
 # Arguments
 - `orig_len::Int`: Original length (height or width) of the image dimension.
@@ -603,16 +651,18 @@ end
 		n_layers::Int, 
 		scale_per_layer::Int) -> Vector{AbstractArray}
 
-Generates a vector of point grids for multiple layers, where each successive layer has a scaled down
-number of points per side.
+Generates a vector of point grids for multiple layers, where each successive 
+	layer has a scaled down number of points per side.
 
 # Arguments
 - `n_per_side::Int`: Number of points per side in the base layer (layer 0).
 - `n_layers::Int`: Total number of layers to generate (excluding layer 0).
-- `scale_per_layer::Int`: Scale factor to reduce points per side for each subsequent layer.
+- `scale_per_layer::Int`: Scale factor to reduce points per side for each 
+	subsequent layer.
 
 # Returns
-- `Vector{AbstractArray}`: A vector where each element is a grid of points for the corresponding layer.
+- `Vector{AbstractArray}`: A vector where each element is a grid of points for 
+	the corresponding layer.
   The vector length is `n_layers + 1` (including the base layer).
 """
 function build_all_layer_point_grids(
@@ -637,7 +687,8 @@ Generates a 2D grid of points evenly spaced in the unit square [0, 1] × [0, 1].
 - `n_per_side::Int`: Number of points per side in the grid.
 
 # Returns
-- `AbstractArray`: An array of 2D points of size `(n_per_side^2, 2)`. Each row is a point `[y, x]` with coordinates
+- `AbstractArray`: An array of 2D points of size `(n_per_side^2, 2)`. Each row 
+	is a point `[y, x]` with coordinates
   normalized between 0 and 1, offset to avoid exact edges.
 """
 function build_point_grid(n_per_side::Int)::AbstractArray
@@ -657,15 +708,18 @@ end
         threshold_offset::Float32,
     ) -> AbstractArray
 
-Computes a stability score for masks based on thresholded intersections and unions.
+Computes a stability score for masks based on thresholded intersections and 
+	unions.
 
 # Arguments
 - `masks::AbstractArray`: Array containing mask probability values or scores.
 - `mask_threshold::Float32`: Central threshold value for binarizing the masks.
-- `threshold_offset::Float32`: Offset applied above and below the central threshold to define "high" and "low" masks.
+- `threshold_offset::Float32`: Offset applied above and below the central 
+	threshold to define "high" and "low" masks.
 
 # Returns
-- `AbstractArray`: Stability scores calculated as the ratio of the intersection to the union across the last two dimensions of the mask array.
+- `AbstractArray`: Stability scores calculated as the ratio of the intersection 
+	to the union across the last two dimensions of the mask array.
 """
 function calculate_stability_score(
 	masks::AbstractArray, mask_threshold::Float32, threshold_offset::Float32,
@@ -686,11 +740,12 @@ end
 """
     area_from_rle(rle::Dict{String, <:Any}) -> Int
 
-Computes the area (number of pixels) of a mask encoded in Run-Length Encoding (RLE) format.
+Computes the area (number of pixels) of a mask encoded in Run-Length Encoding 
+	(RLE) format.
 
 # Arguments
-- `rle::Dict{String, <:Any}`: A dictionary representing the RLE of the mask, expected to contain
-  a key `"counts"` with the RLE counts array.
+- `rle::Dict{String, <:Any}`: A dictionary representing the RLE of the mask, 
+	expected to contain a key `"counts"` with the RLE counts array.
 
 # Returns
 - `Int`: The total area (number of pixels) covered by the mask.
@@ -703,11 +758,12 @@ end
 """
     rle_to_mask(rle::Dict{String, <:Any}) -> AbstractArray{Bool}
 
-Computes a binary mask from an uncompressed Run-Length Encoding (RLE) dictionary.
+Computes a binary mask from an uncompressed Run-Length Encoding (RLE) 
+	dictionary.
 
 # Arguments
-- `rle::Dict{String, <:Any}`: A dictionary representing the uncompressed RLE mask,
-  expected to have keys:
+- `rle::Dict{String, <:Any}`: A dictionary representing the uncompressed RLE 
+	mask, expected to have keys:
   - `"size"`: a tuple or array with the height and width of the mask `(h, w)`.
   - `"counts"`: an array of integers representing the RLE counts.
 
@@ -739,13 +795,14 @@ end
 Encodes a batch of binary masks into run-length encoding (RLE) format.
 
 # Arguments
-- `tensor::AbstractArray`: A 3D array of shape `(B, H, W)` where `B` is the batch size,
-  `H` and `W` are the height and width of each binary mask. Values are assumed to be
-  binary (0 or 1).
+- `tensor::AbstractArray`: A 3D array of shape `(B, H, W)` where `B` is the 
+	batch size,
+  `H` and `W` are the height and width of each binary mask. Values are assumed 
+  to be binary (0 or 1).
 
 # Returns
-- `Vector{Dict{String, <:Any}}`: A vector of length `B`, each element being a dictionary
-  with keys:
+- `Vector{Dict{String, <:Any}}`: A vector of length `B`, each element being a 
+	dictionary with keys:
   - `"size"`: a vector `[H, W]` representing the mask dimensions.
   - `"counts"`: a vector of integers encoding the run-length counts of the mask.
 """
@@ -781,10 +838,12 @@ Split multiple arrays into batches of size `batch_size`.
 
 # Arguments
 - `batch_size::Int`: The size of each batch.
-- `args::AbstractArray...`: One or more arrays, all of the same length, to be batched simultaneously.
+- `args::AbstractArray...`: One or more arrays, all of the same length, to be 
+	batched simultaneously.
 
 # Returns
-- `Vector{Vector{AbstractArray}}`: A vector where each element is a vector containing slices (batches) of the input arrays.
+- `Vector{Vector{AbstractArray}}`: A vector where each element is a vector 
+	containing slices (batches) of the input arrays.
 """
 function batch_iterator(batch_size::Int, args::AbstractArray...)
 	error =
@@ -807,8 +866,8 @@ end
 Convert bounding boxes from XYXY format to XYWH format.
 
 # Arguments
-- `box_xyxy::AbstractArray`: An array representing bounding boxes in XYXY format,
-  where each box is defined as [x_min, y_min, x_max, y_max].
+- `box_xyxy::AbstractArray`: An array representing bounding boxes in XYXY 
+	format, where each box is defined as [x_min, y_min, x_max, y_max].
 
 # Returns
 - `AbstractArray`: A new array with the bounding boxes in XYWH format,
@@ -830,16 +889,21 @@ end
         atol::Float32 = 20.0f0,
     ) -> AbstractArray
 
-Check whether any bounding boxes are near the edges of a crop box but not near the edges of the original image.
+Check whether any bounding boxes are near the edges of a crop box but not near 
+	the edges of the original image.
 
 # Arguments
-- `boxes::AbstractArray`: An array of bounding boxes in XYXY format, shape `(N, 4)` or similar.
+- `boxes::AbstractArray`: An array of bounding boxes in XYXY format, shape 
+	`(N, 4)` or similar.
 - `crop_box::Vector{Int}`: The crop box coordinates `[x0, y0, x1, y1]`.
-- `orig_box::Vector{Int}`: The original image box coordinates `[x0, y0, x1, y1]`.
-- `atol::Float32=20.0f0`: Absolute tolerance distance to consider "near" an edge.
+- `orig_box::Vector{Int}`: The original image box coordinates 
+	`[x0, y0, x1, y1]`.
+- `atol::Float32=20.0f0`: Absolute tolerance distance to consider "near" an 
+	edge.
 
 # Returns
-- `AbstractArray`: A boolean array indicating for each box if it is near the crop box edge but not near the original image edge.
+- `AbstractArray`: A boolean array indicating for each box if it is near the 
+	crop box edge but not near the original image edge.
 """
 function is_box_near_crop_edge(
 	boxes::AbstractArray,

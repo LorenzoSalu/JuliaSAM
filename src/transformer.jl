@@ -20,18 +20,21 @@ include("../src/common.jl")
 
 	struct _Attention
 
-Multi-head attention module with learned linear projections for queries, keys, values, and outputs.
+Multi-head attention module with learned linear projections for queries, keys, 
+	values, and outputs.
 
-This struct implements a scaled dot-product multi-head attention mechanism. It contains
-four linear projections:
-- `q_proj` projects the input to the query space,
-- `k_proj` projects the input to the key space,
-- `v_proj` projects the input to the value space,
-- `out_proj` projects the result of attention back to the original embedding dimension.
+This struct implements a scaled dot-product multi-head attention mechanism. It 
+	contains four linear projections:
+	- `q_proj` projects the input to the query space,
+	- `k_proj` projects the input to the key space,
+	- `v_proj` projects the input to the value space,
+	- `out_proj` projects the result of attention back to the original 
+		embedding dimension.
 
 # Fields
 - `embedding_dim::Int`: The dimension of the input and output embeddings.
-- `internal_dim::Int`: The total dimension of all attention heads combined (`embedding_dim ÷ downsample_rate`).
+- `internal_dim::Int`: The total dimension of all attention heads combined 
+	(`embedding_dim ÷ downsample_rate`).
 - `num_heads::Int`: The number of attention heads.
 - `q_proj::Dense`: Linear layer for projecting queries.
 - `q_proj_ps::NamedTuple`: Parameters of `q_proj`.
@@ -42,7 +45,8 @@ four linear projections:
 - `v_proj::Dense`: Linear layer for projecting values.
 - `v_proj_ps::NamedTuple`: Parameters of `v_proj`.
 - `v_proj_st::NamedTuple`: State of `v_proj`.
-- `out_proj::Dense`: Linear layer for projecting the attention output back to the embedding dimension.
+- `out_proj::Dense`: Linear layer for projecting the attention output back to 
+	the embedding dimension.
 - `out_proj_ps::NamedTuple`: Parameters of `out_proj`.
 - `out_proj_st::NamedTuple`: State of `out_proj`.
 """
@@ -71,19 +75,23 @@ end
 		downsample_rate::Int = 1,
 	)
 		
-Multi-head self-attention module with query, key, and value projections, implemented using `Lux.Dense`.
+Multi-head self-attention module with query, key, and value projections, 
+	implemented using `Lux.Dense`.
 
-This module allows attention across sequences by projecting inputs into multi-head query, key,
-and value spaces, computing scaled dot-product attention, and projecting the output back to the 
-embedding dimension.
+This module allows attention across sequences by projecting inputs into 
+	multi-head query, key, and value spaces, computing scaled dot-product 
+	attention, and projecting the output back to the embedding dimension.
 
 # Arguments
 - `embedding_dim::Int`: Dimension of the input and output embeddings.
-- `num_heads::Int`: Number of attention heads. Must divide `embedding_dim / downsample_rate`.
-- `downsample_rate::Int=1`: Optional factor to reduce internal attention dimensionality (e.g., for efficiency).
+- `num_heads::Int`: Number of attention heads. Must divide `
+	embedding_dim / downsample_rate`.
+- `downsample_rate::Int=1`: Optional factor to reduce internal attention 
+	dimensionality (e.g., for efficiency).
 
 # Returns
-- `_Attention`: A struct containing the attention projections, weights, and internal parameters.
+- `_Attention`: A struct containing the attention projections, weights, and 
+	internal parameters.
 """
 function _Attention(;
 	embedding_dim::Int,
@@ -137,12 +145,14 @@ Performs a forward pass of multi-head attention.
 
 # Arguments
 - `self::_Attention`: The attention module instance.
-- `q::AbstractArray`: Query tensor of shape `(L, B, C)` — sequence length, batch size, channels.
+- `q::AbstractArray`: Query tensor of shape `(L, B, C)` — sequence length, 
+	batch size, channels.
 - `k::AbstractArray`: Key tensor of the same shape as `q`.
 - `v::AbstractArray`: Value tensor of the same shape as `q`.
 
 # Returns
-- `AbstractArray`: Output tensor of shape `(L, B, embedding_dim)` after attention computation.
+- `AbstractArray`: Output tensor of shape `(L, B, embedding_dim)` after 
+	attention computation.
 """
 function (self::_Attention)(;
 	q::AbstractArray,
@@ -201,16 +211,17 @@ end
 
 Separates the last dimension of the tensor into multiple attention heads.
 
-This function reshapes the input tensor so that the channel dimension is split into
-`num_heads` separate attention heads, and rearranges the dimensions for compatibility
-with batched attention computation.
+This function reshapes the input tensor so that the channel dimension is split 
+	into `num_heads` separate attention heads, and rearranges the dimensions 
+	for compatibility with batched attention computation.
 
 # Arguments
 - `x::AbstractArray`: Input tensor of shape `(B, N, C)`, where:
   - `B` is the batch size,
   - `N` is the number of tokens,
   - `C` is the embedding dimension.
-- `num_heads::Int`: Number of attention heads to split the channel dimension into. Must divide `C`.
+- `num_heads::Int`: Number of attention heads to split the channel dimension 
+	into. Must divide `C`.
 
 # Returns
 - `AbstractArray`: Output tensor of shape `(B, num_heads, N, C ÷ num_heads)`.
@@ -236,11 +247,12 @@ This function reverses the effect of `_separate_heads` by merging the per-head
 channels and restoring the original order of tokens.
 
 # Arguments
-- `x::AbstractArray`: Input tensor of shape `(B, num_heads, N, C_per_head)`, where:
-  - `B` is the batch size,
-  - `num_heads` is the number of attention heads,
-  - `N` is the number of tokens,
-  - `C_per_head` is the per-head channel size.
+- `x::AbstractArray`: Input tensor of shape `(B, num_heads, N, C_per_head)`, 
+	where:
+	- `B` is the batch size,
+	- `num_heads` is the number of attention heads,
+	- `N` is the number of tokens,
+	- `C_per_head` is the per-head channel size.
 
 # Returns
 - `AbstractArray`: Output tensor of shape `(B, N, num_heads * C_per_head)`.
@@ -260,7 +272,9 @@ end
 
     struct TwoWayAttentionBlock
 
-A transformer-style module that alternates self-attention, cross-attention, and MLP operations to fuse and refine two interacting sets of tokens—typically query and key/value embeddings (e.g. text and image).
+A transformer-style module that alternates self-attention, cross-attention, and 
+	MLP operations to fuse and refine two interacting sets of tokens—typically 
+	query and key/value embeddings (e.g. text and image).
 
 # Fields
 - `self_attn::_Attention`  
@@ -479,14 +493,17 @@ function (self::TwoWayAttentionBlock)(;
 end
 
 
+
+"""
 ########################################################
 # TwoWayTransformer:
 ######################################################## 
 
-"""
     TwoWayTransformer
 
-A transformer architecture composed of multiple stacked `TwoWayAttentionBlock`s for bi-directional fusion between two sets of embeddings (e.g., image and text). A final attention block reinforces the token-to-image alignment.
+A transformer architecture composed of multiple stacked `TwoWayAttentionBlock`s 
+	for bi-directional fusion between two sets of embeddings (e.g., image and 
+	text). A final attention block reinforces the token-to-image alignment.
 
 # Fields
 - `depth::Int`  
@@ -501,7 +518,8 @@ A transformer architecture composed of multiple stacked `TwoWayAttentionBlock`s 
   Sequence of stacked attention blocks composing the core of the transformer.
 - `final_attn_token_to_image::_Attention`  
   Final cross-attention layer where tokens attend to image features.
-- `norm_final_attn::LayerNorm`, `norm_final_attn_ps::NamedTuple`, `norm_final_attn_st::NamedTuple`  
+- `norm_final_attn::LayerNorm`, `norm_final_attn_ps::NamedTuple`, 
+  `norm_final_attn_st::NamedTuple`  
   LayerNorm and its parameters/state for post-final-attention normalization.
 """
 struct TwoWayTransformer
@@ -527,7 +545,8 @@ end
 		attention_downsample_rate = 2)
 
 Creates a `TwoWayTransformer` composed of multiple `TwoWayAttentionBlock`s
-for deep bidirectional communication between two modalities (e.g., image and token embeddings).
+	for deep bidirectional communication between two modalities (e.g., image 
+	and token embeddings).
 
 # Arguments
 - `depth::Int`  
@@ -541,10 +560,12 @@ for deep bidirectional communication between two modalities (e.g., image and tok
 - `activation::Function = relu`  
   Activation function used in the MLPs (e.g., `relu`, `gelu`, ...).
 - `attention_downsample_rate::Int = 2`  
-  Downsampling ratio used in the key/value projections for cross-attention layers.
+  Downsampling ratio used in the key/value projections for cross-attention 
+  layers.
 
 # Returns
-A `TwoWayTransformer` instance with initialized attention layers and normalization.
+A `TwoWayTransformer` instance with initialized attention layers and 
+	normalization.
 """
 function TwoWayTransformer(;
 	depth::Int,
@@ -603,15 +624,18 @@ end
 		image_pe, 
 		point_embedding) -> (queries, keys)
 
-Applies the full two-way transformer to perform iterative communication between `point_embedding` (queries)
-and `image_embedding` (keys). The process includes self-attention on the points, bidirectional cross-attention,
+Applies the full two-way transformer to perform iterative communication between 
+	`point_embedding` (queries)
+and `image_embedding` (keys). The process includes self-attention on the 
+	points, bidirectional cross-attention,
 and a final attention layer from tokens to image features.
 
 # Arguments
 - `image_embedding::AbstractArray`  
   Tensor of shape `(B, C, H, W)` representing spatial image features.
 - `image_pe::AbstractArray`  
-  Positional encoding of the image features, of the same shape as `image_embedding`.
+  Positional encoding of the image features, of the same shape as 
+  `image_embedding`.
 - `point_embedding::AbstractArray`  
   Token-level embedding representing points, typically of shape `(B, N, C)`.
 
