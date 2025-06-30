@@ -15,9 +15,30 @@ include("../src/transformer.jl")
 include("../src/mask_decoder.jl")
 include("../src/image_encoder.jl")
 
+
+"""
 ########################################################
 # Sam:
 ########################################################
+
+    struct Sam
+
+Top-level container for the SAM (Segment Anything Model) components.
+
+This struct encapsulates all the core modules required for performing segmentation:
+image encoder, prompt encoder, and mask decoder. It also includes preprocessing parameters
+such as pixel normalization statistics and image format.
+
+# Fields
+- `image_encoder::ImageEncoderViT`: Vision Transformer-based encoder for input images.
+- `prompt_encoder::PromptEncoder`: Module to encode point, box, and mask prompts.
+- `mask_decoder::MaskDecoder`: Decoder module that produces segmentation masks and IOU scores.
+- `pixel_mean::AbstractArray{Float32}`: Mean values for pixel-wise normalization (shape `(3, 1, 1)`).
+- `pixel_std::AbstractArray{Float32}`: Standard deviations for normalization (shape `(3, 1, 1)`).
+- `mask_threshold::Float32`: Threshold for converting predicted logits to binary masks.
+- `image_format::String`: Input image format, e.g., `"RGB"` or `"BGR"`.
+- `device::Union{Nothing, String}`: Hardware target, `"cpu"` or `"gpu"`, auto-detected on construction.
+"""
 struct Sam
 	image_encoder::ImageEncoderViT
 	prompt_encoder::PromptEncoder
@@ -29,6 +50,31 @@ struct Sam
     device::Union{Nothing, String}
 end
 
+"""
+    Sam(;
+        image_encoder::ImageEncoderViT,
+        prompt_encoder::PromptEncoder,
+        mask_decoder::MaskDecoder,
+        pixel_mean::Vector{Float64} = [123.675, 116.28, 103.53],
+        pixel_std::Vector{Float64} = [58.395, 57.12, 57.375],
+        mask_threshold::Float32 = 0.0f0,
+        image_format::String = "RGB",
+    )
+        
+Creates a new instance of the `Sam` model with the given components and configuration.
+
+# Arguments
+- `image_encoder::ImageEncoderViT`: The vision transformer used to extract image features.
+- `prompt_encoder::PromptEncoder`: The encoder for sparse and dense prompts.
+- `mask_decoder::MaskDecoder`: The decoder that generates masks and IOU predictions.
+- `pixel_mean::Vector{Float64}`: Pixel mean for image normalization. Defaults to ImageNet mean.
+- `pixel_std::Vector{Float64}`: Pixel std for image normalization. Defaults to ImageNet std.
+- `mask_threshold::Float32`: Threshold to binarize mask logits. Defaults to `0.0f0`.
+- `image_format::String`: Color format of the image. Defaults to `"RGB"`.
+
+# Returns
+- `Sam`: A fully initialized SAM model, ready for encoding and decoding tasks.
+"""
 function Sam(;
 	image_encoder::ImageEncoderViT,
 	prompt_encoder::PromptEncoder,
@@ -61,6 +107,26 @@ function Sam(;
 end
 
 
+"""
+
+    preprocess(self::Sam, x::AbstractArray)
+
+Preprocesses the input image tensor by normalizing and padding it to match the encoder's expected dimensions.
+
+This function normalizes the input using the model's `pixel_mean` and `pixel_std`, and applies zero-padding
+so that the final image size matches the resolution expected by the `ImageEncoderViT`.
+
+# Arguments
+- `self::Sam`: The `Sam` model instance.
+- `x::AbstractArray`: Input image or batch of images, with shape `(C, H, W)` or `(N, C, H, W)`.
+
+# Returns
+- `x::AbstractArray`: The normalized and padded image tensor.
+
+# Notes
+- Assumes images are in the same format (`RGB` or `BGR`) specified by `self.image_format`.
+- The returned image has shape compatible with the `image_encoder`.
+"""
 function preprocess(self::Sam, x::AbstractArray)
 	# Normalize colors
     if ndims(x) == 4
@@ -83,6 +149,29 @@ function preprocess(self::Sam, x::AbstractArray)
 	return x
 end
 
+
+"""
+    postprocess_masks(
+        self::Sam;
+        masks::AbstractArray,
+        input_size::Tuple{Int, Int},
+        original_size::Tuple{Int, Int},
+    )
+
+Postprocesses the predicted masks by resizing them back to the original image resolution.
+
+This function first crops the masks to match the preprocessed input size, and then resizes them
+to the original image resolution using bilinear interpolation.
+
+# Arguments
+- `self::Sam`: The `Sam` model instance.
+- `masks::AbstractArray`: The predicted masks, of shape `(B, 1, H, W)` or `(1, H, W)` depending on context.
+- `input_size::Tuple{Int, Int}`: The spatial resolution of the input image before padding.
+- `original_size::Tuple{Int, Int}`: The original resolution of the image before any resizing or preprocessing.
+
+# Returns
+- `masks::AbstractArray`: The resized masks with shape `(B, 1, H_orig, W_orig)`.
+"""
 function postprocess_masks(
 	self::Sam;
 	masks::AbstractArray,
@@ -141,6 +230,36 @@ function postprocess_masks(
 
 end
 
+
+"""
+    (self::Sam)(
+        batched_input::Vector{Dict{String, Any}};
+        multimask_output::Bool,
+    )
+        
+Performs forward pass for a batch of image prompts using the SAM model.
+
+This method takes a list of input prompts (points, boxes, masks) and their corresponding images,
+runs the image encoder, prompt encoder, and mask decoder, and returns post-processed masks and 
+intermediate outputs.
+
+# Arguments
+- `self::Sam`: The `Sam` model instance.
+- `batched_input::Vector{Dict{String, Any}}`: A list of input dictionaries, each containing:
+    - `"image"`: The input image tensor (H×W×3 or batched).
+    - `"original_size"`: The original image size as a tuple `(H, W)`.
+    - `"point_coords"` (optional): Coordinates of prompts.
+    - `"point_labels"` (optional): Corresponding labels for the prompt points.
+    - `"boxes"` (optional): Bounding box prompts.
+    - `"mask_inputs"` (optional): Mask input prompts.
+- `multimask_output::Bool`: Whether to produce multiple masks per input or not.
+
+# Returns
+- `Vector{Dict{String, AbstractArray}}`: A list of dictionaries for each input containing:
+    - `"masks"`: The binary output masks, thresholded.
+    - `"iou_predictions"`: The predicted mask quality scores.
+    - `"low_res_logits"`: The raw mask logits before upscaling.
+"""
 function (self::Sam)(
 	batched_input::Vector{Dict{String, Any}};
 	multimask_output::Bool,
