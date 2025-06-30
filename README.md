@@ -10,7 +10,7 @@ This project is still under development.
 ## Installation & Setup
 - Step 1 - Install `JuliaSAM.jl`:
 ```bash
-(@v1.8) pkg > add https://github.com/LorenzoSalu/JuliaSAM.git
+pkg > add https://github.com/LorenzoSalu/JuliaSAM.git
 ```
 - Step 2 - install dependencies:
 ```bash
