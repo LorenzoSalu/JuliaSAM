@@ -14,16 +14,20 @@ include("../global_functions.jl")
 
     struct MLPBlock
 
-Feedforward MLP block composed of two fully connected layers with an activation function in between.
+Feedforward MLP block composed of two fully connected layers with an activation 
+    function in between.
 
 # Fields
-- `lin1::Dense`: First dense (fully connected) layer projecting from embedding dimension to hidden MLP dimension.
+- `lin1::Dense`: First dense (fully connected) layer projecting from 
+    embedding dimension to hidden MLP dimension.
 - `lin1_ps::NamedTuple`: Parameters associated with `lin1`.
 - `lin1_st::NamedTuple`: State associated with `lin1`.
-- `lin2::Dense`: Second dense layer projecting back from MLP dimension to embedding dimension.
+- `lin2::Dense`: Second dense layer projecting back from MLP dimension to 
+    embedding dimension.
 - `lin2_ps::NamedTuple`: Parameters associated with `lin2`.
 - `lin2_st::NamedTuple`: State associated with `lin2`.
-- `act::Function`: Activation function applied between the two dense layers (default: `gelu_exact`).
+- `act::Function`: Activation function applied between the two dense layers
+    (default: `gelu_exact`).
 
 """
 struct MLPBlock
@@ -45,7 +49,8 @@ Constructor for `MLPBlock`.
 # Arguments
 - `embedding_dim`: Dimensionality of the input embedding space.
 - `mlp_dim`: Dimensionality of the intermediate hidden layer.
-- `act`: Activation function to apply between the two layers (default: `gelu_exact`).
+- `act`: Activation function to apply between the two layers 
+    (default: `gelu_exact`).
 
 # Returns
 - A new `MLPBlock` instance with initialized layers and parameters.
@@ -86,11 +91,13 @@ Forward pass for the `MLPBlock`.
     - 3D tensor shape assumed as (Batch, SequenceLength, Channels).
 
 # Returns
-- Output tensor of the same shape as input with features transformed by the two-layer MLP and activation.
+- Output tensor of the same shape as input with features transformed by the 
+    two-layer MLP and activation.
 
 # Description
 - Permutes dimensions to channel-first format for dense layer compatibility.
-- Applies the first dense layer (`lin1`), activation, then second dense layer (`lin2`).
+- Applies the first dense layer (`lin1`), activation, then second dense layer 
+    (`lin2`).
 - Restores original dimension ordering before returning.
 """
 function (self::MLPBlock)(x::AbstractArray)::AbstractArray
@@ -131,11 +138,13 @@ end
 
     struct LayerNorm2d <: LuxCore.AbstractLuxLayer
 
-2D Layer Normalization module applied over the channel dimension of a 4D input tensor.
+2D Layer Normalization module applied over the channel dimension of a 4D input 
+    tensor.
 
 # Fields
 - `num_channels::Int`: Number of channels in the input tensor.
-- `eps::Float32`: Small epsilon added for numerical stability during normalization.
+- `eps::Float32`: Small epsilon added for numerical stability during 
+    normalization.
 
 """
 struct LayerNorm2d <: LuxCore.AbstractLuxLayer
@@ -179,7 +188,8 @@ end
 """
     Lux.apply(ln::LayerNorm2d, x, ps, st)
 
-Applies layer normalization on a 4D input tensor `x` with shape `(Batch, Height, Width, Channels)`.
+Applies layer normalization on a 4D input tensor `x` with shape 
+    `(Batch, Height, Width, Channels)`.
 
 # Arguments
 - `ln`: `LayerNorm2d` instance.

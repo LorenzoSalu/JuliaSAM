@@ -18,14 +18,16 @@ using NNlib
 
     struct MLP
 
-Multi-layer perceptron (MLP) implemented using a sequence of dense layers and optional sigmoid output.
+Multi-layer perceptron (MLP) implemented using a sequence of dense layers and 
+	optional sigmoid output.
 
 # Fields
 - `num_layers::Int`: Number of layers in the network.
 - `layers::Chain`: Sequence of `Dense` layers.
 - `layers_ps::NamedTuple`: Parameters for the layers.
 - `layers_st::NamedTuple`: States for the layers.
-- `sigmoid_output::Bool`: Whether to apply a sigmoid activation on the final output.
+- `sigmoid_output::Bool`: Whether to apply a sigmoid activation on the final 
+	output.
 
 """
 struct MLP
@@ -52,7 +54,8 @@ Constructs an MLP with the specified architecture.
 - `hidden_dim`: Number of units in the hidden layers.
 - `output_dim`: Dimension of the output layer.
 - `num_layers`: Total number of layers (including output layer).
-- `sigmoid_output` (optional): If `true`, applies a `sigmoid` to the final output. Default is `false`.
+- `sigmoid_output` (optional): If `true`, applies a `sigmoid` to the final 
+	output. Default is `false`.
 
 # Returns
 - An instance of the `MLP` struct with initialized layers and parameters.
@@ -105,7 +108,8 @@ Applies the MLP to an input tensor `x`, supporting both 2D and 4D inputs.
 - The output of the MLP with the same shape format as the input.
 
 # Description
-- For 4D inputs, reshapes the input to 2D, processes it through the layers, and reshapes it back.
+- For 4D inputs, reshapes the input to 2D, processes it through the layers, and 
+	reshapes it back.
 - Applies `relu` activation after each layer except the final one.
 - Applies `sigmoid` to the final output if `sigmoid_output` is `true`.
 
@@ -165,12 +169,14 @@ end
     struct MaskDecoder
 
 Transformer-based mask decoder module used for segmentation tasks.  
-Combines token embeddings, upscaling convolutions, hypernetworks, and an IoU prediction head.
+Combines token embeddings, upscaling convolutions, hypernetworks, and an IoU 
+	prediction head.
 
 # Fields
 - `transformer_dim::Int`: Dimensionality of transformer embeddings.
 - `transformer::Any`: Transformer module used for decoding.
-- `num_multimask_outputs::Int`: Number of predicted masks (excluding the best one).
+- `num_multimask_outputs::Int`: Number of predicted masks 
+	(excluding the best one).
 - `iou_token::Embedding`: Learnable token for IoU prediction.
 - `iou_token_ps::NamedTuple`: Parameters for `iou_token`.
 - `iou_token_st::NamedTuple`: State for `iou_token`.
@@ -178,11 +184,14 @@ Combines token embeddings, upscaling convolutions, hypernetworks, and an IoU pre
 - `mask_tokens::Embedding`: Learnable tokens used to predict segmentation masks.
 - `mask_tokens_ps::NamedTuple`: Parameters for `mask_tokens`.
 - `mask_tokens_st::NamedTuple`: State for `mask_tokens`.
-- `output_upscaling::Chain`: Decoder upscaling module using transposed convolutions and activations.
+- `output_upscaling::Chain`: Decoder upscaling module using transposed 
+	convolutions and activations.
 - `output_upscaling_ps::NamedTuple`: Parameters for the upscaling module.
 - `output_upscaling_st::NamedTuple`: State for the upscaling module.
-- `output_hypernetworks_mlps::Vector{MLP}`: Per-mask MLPs for generating dynamic mask weights.
-- `iou_prediction_head::MLP`: MLP that predicts mask quality scores (IoU) given the output tokens.
+- `output_hypernetworks_mlps::Vector{MLP}`: Per-mask MLPs for generating 
+	dynamic mask weights.
+- `iou_prediction_head::MLP`: MLP that predicts mask quality scores (IoU) given 
+	the output tokens.
 
 """
 struct MaskDecoder
@@ -223,7 +232,8 @@ Creates a new instance of the `MaskDecoder` struct.
 - `iou_head_hidden_dim`: Hidden layer size of the IoU prediction MLP.
 
 # Returns
-- A fully initialized `MaskDecoder` instance with learnable tokens, transformer, upscaling, and prediction heads.
+- A fully initialized `MaskDecoder` instance with learnable tokens, 
+	transformer, upscaling, and prediction heads.
 
 """
 function MaskDecoder(;
@@ -311,18 +321,21 @@ end
 		dense_prompt_embeddings, 
 		multimask_output)
 
-Applies the mask decoder to image and prompt embeddings, producing segmentation masks and IoU predictions.
+Applies the mask decoder to image and prompt embeddings, producing segmentation 
+	masks and IoU predictions.
 
 # Keyword Arguments
 - `image_embeddings`: Feature map from the image encoder.
 - `image_pe`: Positional encoding for the image tokens.
 - `sparse_prompt_embeddings`: Sparse token embeddings (e.g., points, boxes).
 - `dense_prompt_embeddings`: Dense mask embeddings.
-- `multimask_output`: If `true`, returns multiple masks including the best one; otherwise, only the best.
+- `multimask_output`: If `true`, returns multiple masks including the best one; 
+	otherwise, only the best.
 
 # Returns
 - A tuple `(masks, iou_pred)` where:
-    - `masks`: Tensor of shape `(B, K, H, W)` with K = 1 or `num_multimask_outputs`.
+    - `masks`: Tensor of shape `(B, K, H, W)` with K = 1 or 
+		`num_multimask_outputs`.
     - `iou_pred`: Predicted IoU scores for each output mask.
 
 """
@@ -367,18 +380,27 @@ end
 
 Predicts segmentation masks and their quality scores using the `MaskDecoder`.
 
-This function processes the provided image features and prompt embeddings to generate segmentation masks via a transformer and hypernetwork-based decoding. It also predicts mask quality scores (IoU) for ranking the outputs.
+This function processes the provided image features and prompt embeddings to 
+	generate segmentation masks via a transformer and hypernetwork-based 
+	decoding. It also predicts mask quality scores (IoU) for ranking the 
+	outputs.
 
 # Arguments
 - `self::MaskDecoder`: The `MaskDecoder` instance.
-- `image_embeddings::AbstractArray`: Feature map from the image encoder, shape `(B, C, H, W)`.
-- `image_pe::AbstractArray`: Positional encodings for image features, shape `(B, C, H, W)`.
-- `sparse_prompt_embeddings::AbstractArray`: Sparse token embeddings (e.g., points, boxes), shape `(B, N_tokens, D)`.
-- `dense_prompt_embeddings::AbstractArray`: Dense embeddings added to the image features, shape `(B, C, H, W)`.
+- `image_embeddings::AbstractArray`: Feature map from the image encoder, shape `
+	(B, C, H, W)`.
+- `image_pe::AbstractArray`: Positional encodings for image features, shape `
+	(B, C, H, W)`.
+- `sparse_prompt_embeddings::AbstractArray`: Sparse token embeddings 
+	(e.g., points, boxes), shape `(B, N_tokens, D)`.
+- `dense_prompt_embeddings::AbstractArray`: Dense embeddings added to the image 
+	features, shape `(B, C, H, W)`.
 
 # Returns
-- `masks::AbstractArray`: Predicted segmentation masks of shape `(B, num_masks, H, W)`, where `num_masks = num_multimask_outputs + 1`.
-- `iou_pred::AbstractArray`: IoU quality scores for each predicted mask, shape `(B, num_masks)`.
+- `masks::AbstractArray`: Predicted segmentation masks of shape 
+	`(B, num_masks, H, W)`, where `num_masks = num_multimask_outputs + 1`.
+- `iou_pred::AbstractArray`: IoU quality scores for each predicted mask, shape 
+	`(B, num_masks)`.
 
 """
 function predict_mask(
